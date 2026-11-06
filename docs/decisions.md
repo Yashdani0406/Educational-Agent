@@ -46,3 +46,18 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `topics` belong to a course; a `module_topics` link table attaches them to modules; adding a module or topic is get-or-create by case-insensitive name.
 *Rejected:* Topics owned by a single module.
 *Why:* The same topic (e.g. Gradient Descent) recurs across modules and must stay one record so mastery and notes accumulate in one place.
+
+## 2026-11-06 — Gemini quota is counted locally, 429 is ground truth
+*Chose:* Count requests in the `gemini_usage` table and mark the day exhausted when Gemini returns a 429.
+*Rejected:* Querying the API for remaining free quota.
+*Why:* No API exposes remaining free-tier quota, so a local count drives the "N left today" display and a real 429 overrides it if the count is wrong.
+
+## 2026-11-06 — Quota resets at Pacific midnight
+*Chose:* Key usage rows by the America/Los_Angeles calendar date (DST-aware) and report the next Pacific midnight as UTC.
+*Rejected:* Resetting at local or UTC midnight.
+*Why:* Google resets the free-tier daily quota at Pacific midnight, so matching it keeps the local count aligned with the real limit.
+
+## 2026-11-06 — `tzdata` for Windows time zones
+*Chose:* Depend on the `tzdata` package so `zoneinfo` can load `America/Los_Angeles`.
+*Rejected:* Relying on a system tz database or a fixed UTC-8 offset.
+*Why:* Windows ships no IANA tz database, and a fixed offset would be wrong during daylight saving time.
