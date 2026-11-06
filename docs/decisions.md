@@ -31,3 +31,18 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `effective_routing_mode` returns `all_qwen` when the key is missing or blank.
 *Rejected:* Raising an error at startup when `ROUTING_MODE` needs Gemini but no key exists.
 *Why:* The app must stay usable fully offline with local Qwen; a blank `GEMINI_API_KEY=` line in `.env` counts as no key.
+
+## 2026-11-06 — Raw sqlite3 + SQL migration files, no ORM
+*Chose:* Plain `sqlite3` with numbered `.sql` migrations (shipped as package data) tracked by `PRAGMA user_version`; each migration applied atomically with its version bump.
+*Rejected:* SQLAlchemy/Alembic or another ORM.
+*Why:* The schema is small and local; an ORM and migration framework add dependencies and indirection for no gain, and SQL files are easy to read and review.
+
+## 2026-11-06 — SQLite in WAL mode
+*Chose:* `PRAGMA journal_mode=WAL` and `foreign_keys=ON` on every connection, one short-lived connection per operation.
+*Rejected:* Default rollback-journal mode and a shared long-lived connection.
+*Why:* WAL lets the UI read while background agents write without "database is locked" errors; per-use connections are closed promptly, which also avoids Windows file locks.
+
+## 2026-11-06 — Topics are course-level, linked to modules
+*Chose:* `topics` belong to a course; a `module_topics` link table attaches them to modules; adding a module or topic is get-or-create by case-insensitive name.
+*Rejected:* Topics owned by a single module.
+*Why:* The same topic (e.g. Gradient Descent) recurs across modules and must stay one record so mastery and notes accumulate in one place.
