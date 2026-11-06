@@ -38,3 +38,31 @@ def test_connection_closed_on_exit(db):
         pass
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
+
+
+def _version(db):
+    with db.connect() as conn:
+        return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def test_failed_migration_rolls_back(db, monkeypatch):
+    monkeypatch.setattr(
+        "eduagent.db.database._load_migrations",
+        lambda: [(1, "CREATE TABLE a (x);"), (2, "CREATE TABLE b (x); THIS IS NOT SQL;")],
+    )
+    with pytest.raises(sqlite3.Error):
+        db.migrate()
+    assert _version(db) == 1
+    with db.connect() as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "a" in tables and "b" not in tables
+
+
+def test_migrations_at_or_below_version_skipped(db, monkeypatch):
+    monkeypatch.setattr("eduagent.db.database._load_migrations", lambda: [(1, "CREATE TABLE a (x);")])
+    assert db.migrate() == 1
+    monkeypatch.setattr(
+        "eduagent.db.database._load_migrations",
+        lambda: [(1, "THIS WOULD FAIL;"), (2, "CREATE TABLE b (x);")],
+    )
+    assert db.migrate() == 2

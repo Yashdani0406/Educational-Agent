@@ -10,6 +10,15 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
+def _load_migrations() -> list[tuple[int, str]]:
+    """Packaged migrations as (number, sql), in numeric order."""
+    return sorted(
+        (int(f.name.split("_", 1)[0]), f.read_text(encoding="utf-8"))
+        for f in resources.files("eduagent.db.migrations").iterdir()
+        if f.name.endswith(".sql")
+    )
+
+
 class Database:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -33,17 +42,12 @@ class Database:
 
     def migrate(self) -> int:
         """Apply pending migrations in order, each atomically with its version bump."""
-        files = sorted(
-            (int(f.name.split("_", 1)[0]), f)
-            for f in resources.files("eduagent.db.migrations").iterdir()
-            if f.name.endswith(".sql")
-        )
+        files = _load_migrations()
         with self.connect() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            for number, f in files:
+            for number, script in files:
                 if number <= version:
                     continue
-                script = f.read_text(encoding="utf-8")
                 try:
                     conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
                 except BaseException:
@@ -51,5 +55,5 @@ class Database:
                         conn.rollback()
                     raise
                 version = number
-                log.info("applied migration %s", f.name)
+                log.info("applied migration %04d", number)
         return version
