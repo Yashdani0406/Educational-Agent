@@ -114,24 +114,26 @@ class RoutedLlm(BaseLlm):
     qwen: BaseLlm
 
     async def _call(
-        self, llm: BaseLlm, model_id: str, llm_request: LlmRequest, stream: bool
+        self, llm: BaseLlm, label: str, llm_request: LlmRequest, stream: bool
     ) -> list[LlmResponse]:
         # Collected before yielding so any error arrives before output (chat is non-streaming in v1).
-        request = llm_request.model_copy(update={"model": model_id})
+        # The delegate's own id (e.g. "ollama_chat/qwen3:4b") must reach it; ADK's LiteLlm
+        # prefers llm_request.model over its own. `label` is only for logs and the trace.
+        request = llm_request.model_copy(update={"model": llm.model})
         started = time.perf_counter()
         responses = [r async for r in llm.generate_content_async(request, stream=stream)]
         ms = int((time.perf_counter() - started) * 1000)
         usage = next((r.usage_metadata for r in reversed(responses) if r.usage_metadata), None)
         tokens_in = usage.prompt_token_count if usage else None
         tokens_out = usage.candidates_token_count if usage else None
-        log.info("model=%s tokens=%s/%s ms=%d", model_id, tokens_in, tokens_out, ms)
+        log.info("model=%s tokens=%s/%s ms=%d", label, tokens_in, tokens_out, ms)
         trace_id = current_trace_id.get()
         if trace_id:
             self.tracer.add_step(
                 trace_id, "model_call", "model_router",
                 inputs=_cap(summarize_request(request)),
                 outputs=_cap(summarize_response(responses)),
-                model=model_id, tokens_in=tokens_in, tokens_out=tokens_out, duration_ms=ms,
+                model=label, tokens_in=tokens_in, tokens_out=tokens_out, duration_ms=ms,
             )
         return responses
 
@@ -156,9 +158,8 @@ class RoutedLlm(BaseLlm):
                         outputs={"error": type(e).__name__},
                         model=choice.model_id,
                     )
-                responses = await self._call(
-                    self.qwen, self.router.qwen_model_id, llm_request, stream
-                )
+                label = self.qwen.model.removeprefix("ollama_chat/")
+                responses = await self._call(self.qwen, label, llm_request, stream)
         else:
             responses = await self._call(self.qwen, choice.model_id, llm_request, stream)
         for response in responses:

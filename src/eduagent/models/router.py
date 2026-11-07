@@ -29,10 +29,6 @@ class ModelRouter:
         self._settings = settings
         self._quota = quota
 
-    @property
-    def qwen_model_id(self) -> str:
-        return self._settings.qwen_model
-
     def _qwen(self, reason: str) -> ModelChoice:
         return ModelChoice("qwen", self._settings.qwen_model, reason)
 

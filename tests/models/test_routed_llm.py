@@ -63,7 +63,7 @@ class Env:
         )
         self.tracer = Tracer(self.db)
         self.gemini = gemini or FakeLlm(model="gem", reply="from gemini", seen_models=[])
-        self.qwen = qwen or FakeLlm(model="qw", reply="from qwen", seen_models=[])
+        self.qwen = qwen or FakeLlm(model="ollama_chat/qw", reply="from qwen", seen_models=[])
         self.llm = RoutedLlm(
             model="routed", job="chat", router=ModelRouter(settings, self.quota),
             quota=self.quota, tracer=self.tracer, gemini=self.gemini, qwen=self.qwen,
@@ -115,7 +115,7 @@ async def test_rate_limit_falls_back_and_exhausts(tmp_path, caplog):
     assert [s.step_type for s in env.steps()] == ["fallback", "model_call"]
     assert env.steps()[0].component == "model_router"
     assert env.steps()[0].outputs == {"error": "ClientError"}
-    assert env.qwen.seen_models == ["qw"]
+    assert env.qwen.seen_models == ["ollama_chat/qw"]
     assert any(
         r.levelno == logging.WARNING
         and r.getMessage() == "gemini failed (ClientError), falling back to qwen"
@@ -214,3 +214,10 @@ def test_build_routed_llm_wires_real_models(tmp_path):
     llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
     assert llm.gemini.model == settings.gemini_model
     assert llm.qwen.model == f"ollama_chat/{settings.qwen_model}"
+
+
+async def test_qwen_direct_gets_ollama_chat_model(tmp_path):
+    env = Env(tmp_path, mode="all_qwen")
+    await run(env, traced=False)
+    assert env.qwen.seen_models == ["ollama_chat/qw"]
+    assert env.gemini.seen_models == []
