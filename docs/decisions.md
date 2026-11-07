@@ -81,3 +81,23 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Stamp the current trace id (or `-`) on each log line, and scrub the API key from the final formatted text, tracebacks included.
 *Rejected:* Logging trace ids only inside trace rows.
 *Why:* A log line can be matched to its replay page, and the key cannot leak through an exception message.
+
+## 2026-11-07 — One `BaseLlm` wrapper (`RoutedLlm`) for routing and fallback
+*Chose:* A `BaseLlm` subclass that picks Gemini or Qwen, counts quota, falls back on any Gemini error and writes the trace steps.
+*Rejected:* ADK before/after-model callbacks on each agent.
+*Why:* One place holds all of it and agents just see a model; callbacks would have to be repeated on every agent.
+
+## 2026-11-07 — Chat is non-streaming in v1
+*Chose:* Collect the whole model reply, then yield it.
+*Rejected:* Streaming tokens to the UI.
+*Why:* Any Gemini error then arrives before output, so the fallback to Qwen is clean and the user never sees a half answer.
+
+## 2026-11-07 — Qwen thinking switched off with `think=False`
+*Chose:* Pass `think=False` to litellm for `ollama_chat/` (checked in litellm 1.108.1: it is forwarded as Ollama's `think` field; `reasoning_effort="none"` maps to the same). `strip_think` stays as a safety net.
+*Rejected:* Relying on stripping `<think>` text alone.
+*Why:* Thinking tokens are slow on a 4B local model, and turning them off at the source is cheaper than discarding them.
+
+## 2026-11-07 — Full prompt and reply stored in `model_call` steps, capped at 20k chars per field
+*Chose:* Store system instruction, all messages (including retrieved chunks and tool results), tool names and the reply, cutting any string over 20,000 characters.
+*Rejected:* Storing only token counts, or uncapped text.
+*Why:* The replay must show exactly what the model saw; the cap keeps one huge prompt from bloating the database.
