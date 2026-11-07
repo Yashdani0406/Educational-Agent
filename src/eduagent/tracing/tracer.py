@@ -63,8 +63,19 @@ class Tracer:
     def _dump(self, value: Any) -> str | None:
         if value is None:
             return None
-        text = json.dumps(redact(value, self._secrets), default=str)
-        return scrub(text, self._secrets)
+        redacted = redact(value, self._secrets)
+        text = scrub(json.dumps(redacted, default=str), self._secrets)
+        try:
+            json.loads(text)
+            return text
+        except ValueError:
+            pass
+        # The text scrub corrupted the JSON: redact the decoded strings instead.
+        try:
+            decoded = json.loads(json.dumps(redacted, default=str))
+            return json.dumps(redact(decoded, self._secrets))
+        except (ValueError, TypeError):
+            return json.dumps("[redacted: unserializable]")
 
     def start_trace(self, kind: Literal["chat", "upload"], label: str) -> str:
         trace_id = uuid.uuid4().hex
@@ -91,18 +102,18 @@ class Tracer:
     ) -> TraceStep:
         in_json = self._dump(inputs)
         out_json = self._dump(outputs)
+        step_type = scrub(step_type, self._secrets)  # type: ignore[assignment]
+        component = scrub(component, self._secrets)
+        model = scrub(model, self._secrets) if model is not None else None
         with self._db.connect() as conn:
             seq = conn.execute(
-                "SELECT COALESCE(MAX(seq), 0) + 1 FROM trace_steps WHERE trace_id = ?",
-                (trace_id,),
-            ).fetchone()[0]
-            conn.execute(
                 "INSERT INTO trace_steps(trace_id, seq, step_type, component, input_json, "
                 "output_json, model, tokens_in, tokens_out, duration_ms, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (trace_id, seq, step_type, component, in_json, out_json, model,
-                 tokens_in, tokens_out, duration_ms, _now()),
-            )
+                "SELECT ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ? "
+                "FROM trace_steps WHERE trace_id = ? RETURNING seq",
+                (trace_id, step_type, component, in_json, out_json, model,
+                 tokens_in, tokens_out, duration_ms, _now(), trace_id),
+            ).fetchone()[0]
         step = TraceStep(
             trace_id, seq, step_type, component,
             json.loads(in_json) if in_json is not None else None,

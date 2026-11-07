@@ -86,7 +86,7 @@ def test_subscribers_notified_and_unsubscribe(db):
     assert [s.seq for s in got] == [1]
 
 
-def test_failing_subscriber_does_not_break(db):
+def test_failing_subscriber_does_not_break(db, caplog):
     t = Tracer(db)
     tid = t.start_trace("chat", "x")
     got = []
@@ -98,6 +98,7 @@ def test_failing_subscriber_does_not_break(db):
     t.subscribe(got.append)
     step = t.add_step(tid, "route", "c")
     assert got == [step]
+    assert "Trace subscriber failed" in caplog.text
     assert len(t.get_trace(tid).steps) == 1
 
 
@@ -145,3 +146,38 @@ def test_non_json_inputs_stringified(db):
 
 def test_current_trace_id_default():
     assert current_trace_id.get() is None
+
+
+def _table_text(db):
+    with db.connect() as conn:
+        return " ".join(
+            str(v) for r in conn.execute("SELECT * FROM trace_steps") for v in tuple(r)
+        )
+
+
+def test_secret_scrubbed_from_component_and_model(db):
+    t = Tracer(db, secrets=["SEKRET"])
+    tid = t.start_trace("chat", "x")
+    step = t.add_step(tid, "model_call", "http://h/x?key=SEKRET", model="m-SEKRET")
+    assert "SEKRET" not in _table_text(db)
+    assert "SEKRET" not in step.component and "SEKRET" not in step.model
+
+
+@pytest.mark.parametrize("secret", [r'ab"c\d', "true", "null", "1", "{", '"'])
+def test_json_hostile_secrets_keep_valid_json(db, secret):
+    t = Tracer(db, secrets=[secret])
+    tid = t.start_trace("chat", "x")
+    t.add_step(tid, "tool_call", "c", inputs={"a": True, "n": None, "i": 1, "s": f"v{secret}w"})
+    tr = t.get_trace(tid)
+    assert len(tr.steps) == 1
+    assert secret not in tr.steps[0].inputs["s"]
+    assert "w" in tr.steps[0].inputs["s"]
+
+
+def test_seq_assigned_atomically_in_insert(db):
+    t = Tracer(db)
+    tid = t.start_trace("chat", "x")
+    seqs = [t.add_step(tid, "route", "c").seq for _ in range(5)]
+    other = t.start_trace("chat", "y")
+    assert seqs == [1, 2, 3, 4, 5]
+    assert t.add_step(other, "route", "c").seq == 1
