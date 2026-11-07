@@ -221,3 +221,12 @@ async def test_qwen_direct_gets_ollama_chat_model(tmp_path):
     await run(env, traced=False)
     assert env.qwen.seen_models == ["ollama_chat/qw"]
     assert env.gemini.seen_models == []
+
+
+async def test_qwen_think_is_stripped_but_gemini_is_untouched(tmp_path):
+    env = Env(tmp_path, mode="all_qwen", qwen=FakeLlm(model="ollama_chat/qw", reply="<think>x</think> hello"))
+    assert text_of(await run(env)) == "hello"
+    assert env.steps()[0].outputs["text"] == "hello"
+    (tmp_path / "g").mkdir()
+    env = Env(tmp_path / "g", gemini=FakeLlm(model="gem", reply="<think>x</think> hi"))
+    assert text_of(await run(env, traced=False)) == "<think>x</think> hi"

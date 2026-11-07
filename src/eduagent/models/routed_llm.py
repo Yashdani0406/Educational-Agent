@@ -14,6 +14,7 @@ from google.genai.errors import ClientError
 
 from eduagent.config import Settings
 from eduagent.models.quota import QuotaTracker
+from eduagent.models.qwen import strip_think
 from eduagent.models.router import JobKind, ModelRouter
 from eduagent.tracing.tracer import Tracer, current_trace_id
 
@@ -34,6 +35,14 @@ def is_rate_limit(exc: BaseException) -> bool:
     if isinstance(exc, litellm.RateLimitError):
         return True
     return "RESOURCE_EXHAUSTED" in str(exc)
+
+
+def _strip_qwen_think(responses: list[LlmResponse]) -> None:
+    """Remove leaked <think> text from Qwen replies (in place)."""
+    for r in responses:
+        for p in (r.content.parts if r.content and r.content.parts else []):
+            if p.text and not p.thought:
+                p.text = strip_think(p.text)
 
 
 def _cap(value: Any) -> Any:
@@ -123,6 +132,8 @@ class RoutedLlm(BaseLlm):
         started = time.perf_counter()
         responses = [r async for r in llm.generate_content_async(request, stream=stream)]
         ms = int((time.perf_counter() - started) * 1000)
+        if llm is self.qwen:
+            _strip_qwen_think(responses)
         usage = next((r.usage_metadata for r in reversed(responses) if r.usage_metadata), None)
         tokens_in = usage.prompt_token_count if usage else None
         tokens_out = usage.candidates_token_count if usage else None
@@ -178,7 +189,6 @@ def build_routed_llm(
     qwen = LiteLlm(
         model=f"ollama_chat/{settings.qwen_model}",
         api_base=settings.ollama_url,
-        think=False,
     )
     return RoutedLlm(
         model=f"routed/{job}", job=job, router=router, quota=quota, tracer=tracer,

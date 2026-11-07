@@ -7,6 +7,7 @@ from eduagent.models.qwen import qwen_complete, strip_think
 def test_strip_think():
     assert strip_think("<think>hmm</think>\n tutor") == "tutor"
     assert strip_think("<think>unclosed tutor") == ""
+    assert strip_think("reasoning only closed\n</think>\n\nhello") == "hello"
     assert strip_think("plain text") == "plain text"
 
 

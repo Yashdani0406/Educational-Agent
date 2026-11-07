@@ -92,10 +92,10 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Rejected:* Streaming tokens to the UI.
 *Why:* Any Gemini error then arrives before output, so the fallback to Qwen is clean and the user never sees a half answer.
 
-## 2026-11-07 — Qwen thinking switched off with `think=False`
-*Chose:* Pass `think=False` to litellm for `ollama_chat/` (checked in litellm 1.108.1: it is forwarded as Ollama's `think` field; `reasoning_effort="none"` maps to the same). `strip_think` stays as a safety net.
-*Rejected:* Relying on stripping `<think>` text alone.
-*Why:* Thinking tokens are slow on a 4B local model, and turning them off at the source is cheaper than discarding them.
+## 2026-11-07 — Qwen thinking is separated and stripped, not disabled
+*Chose:* Send no `think` option and let Ollama return reasoning in its own field (ADK shows it as a `thought` part, which agents ignore); `strip_think` also runs on every Qwen reply as a safety net, including a reply with only a closing `</think>`.
+*Rejected:* `think=False` (also tried `reasoning_effort="none"` and `extra_body`): with this `qwen3:4b` and Ollama build none of them stops the thinking, and `think=False` makes the reasoning leak into the reply text ending in a bare `</think>`.
+*Why:* Checked directly against Ollama: the model always thinks (about 120-200 tokens for a one-word reply); only the default setting keeps the reply text clean.
 
 ## 2026-11-07 — Full prompt and reply stored in `model_call` steps, capped at 20k chars per field
 *Chose:* Store system instruction, all messages (including retrieved chunks and tool results), tool names and the reply, cutting any string over 20,000 characters.
