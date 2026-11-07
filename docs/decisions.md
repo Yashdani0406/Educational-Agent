@@ -61,3 +61,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Depend on the `tzdata` package so `zoneinfo` can load `America/Los_Angeles`.
 *Rejected:* Relying on a system tz database or a fixed UTC-8 offset.
 *Why:* Windows ships no IANA tz database, and a fixed offset would be wrong during daylight saving time.
+
+## 2026-11-06 — Tracing in our own SQLite tables, not OpenTelemetry
+*Chose:* Record route/model/tool/fallback/answer steps in `traces` and `trace_steps`.
+*Rejected:* OpenTelemetry spans and an external collector.
+*Why:* The same rows double as the debugging tool and feed the "How it works" replay page, with no extra service to run.
+
+## 2026-11-06 — Redact at write time, by full key name
+*Chose:* Scrub secrets before storing: secret values everywhere (also in the serialized JSON), and dict keys matched by full name (`api_key`, `token`, `x-api-key`).
+*Rejected:* Redacting on read, or substring key matching.
+*Why:* Nothing sensitive ever reaches disk; substring matching would wrongly hide `max_tokens` and `prompt_token_count`.
