@@ -31,7 +31,7 @@
 | Plan | Scope (spec §) | Depends on |
 |---|---|---|
 | **1. Foundation (this plan)** | Scaffold, settings, SQLite layer, quota, model router + fallback, tracing, coordinator, chat shell, launcher (§4.1, 4.5, 4.11, 4.12, 4.14 tracing, 4.15) | — |
-| 2. Knowledge base & ingestion | Chroma server in launcher, parsers, structural chunker, topic tagging + confirmation, embeddings, resumable background job runner, upload queue, Library page, dedupe/replace/delete safety rules, KB MCP server, Fetch MCP for links, upload traces (§4.2–4.4, 4.10) | 1 |
+| 2. Knowledge base & ingestion | Chroma server in launcher, parsers, structural chunker, topic tagging + confirmation, embeddings, resumable background job runner, upload queue, Library page, dedupe/replace/delete safety rules, KB MCP server, Fetch MCP for links, upload traces (`parse/chunk/tag/embed/store` steps), retrieval tracing — KB tools return a `trace` section (embed ms, search ms, k, filters, per-chunk score) saved into the `tool_result` step (§4.2–4.4, 4.10, 4.14) | 1 |
 | 3. Notes maker | Generation cache, heavy-job queueing on quota exhaustion, split-and-combine notes, flashcard generation, versioned notes, Notes page, Playwright PDF export (§4.6 Notes, 4.9) | 2 |
 | 4. Tutor | Study-records MCP, grounded answers with citations + labels, doubt logging, web/arXiv fallback MCPs, flashcard review + SRS, module quiz generation/validation/taking, targeted quizzes, weak-topic nudges (§4.6 Tutor, 4.7, 4.8) | 3 |
 | 5. Analytics | Mastery formula, snapshots, confusion/misconception/forgetting signals, Progress page with charts, "How am I doing?" (§4.6 Analytics) | 4 |
@@ -310,7 +310,13 @@ Routing table for `choose` (`mode` = `settings.effective_routing_mode`):
 | all_gemini | gemini if available else qwen | gemini if available else qwen |
 
 `reason` is one of `"mode"`, `"job split"`, `"gemini quota exhausted"`.
-`RoutedLlm` behaviour: gemini choice → `quota.record_request()`, delegate; on exception → if `is_rate_limit` then `quota.mark_exhausted()`; add a `fallback` trace step (component `"model_router"`, outputs `{"error": type(e).__name__}`) when `current_trace_id` is set; delegate the same request to qwen (with `llm_request.model` swapped). Every completed call adds a `model_call` step with model id, `usage_metadata` token counts, duration, and logs `INFO "model=<id> tokens=<in>/<out> ms=<d>"`; a fallback logs `WARNING "gemini failed (<ExcType>), falling back to qwen"`; quota exhaustion logs `WARNING` once. Chat runs non-streaming in v1 so errors always arrive before any output.
+`RoutedLlm` behaviour: gemini choice → `quota.record_request()`, delegate; on exception → if `is_rate_limit` then `quota.mark_exhausted()`; add a `fallback` trace step (component `"model_router"`, outputs `{"error": type(e).__name__}`) when `current_trace_id` is set; delegate the same request to qwen (with `llm_request.model` swapped). Every completed call adds a `model_call` step with model id, `usage_metadata` token counts, duration, **and the full request and response** (spec §4.14: "clicking a step shows exactly what went in and came out"), and logs `INFO "model=<id> tokens=<in>/<out> ms=<d>"`; a fallback logs `WARNING "gemini failed (<ExcType>), falling back to qwen"`; quota exhaustion is logged once by `QuotaTracker.mark_exhausted` (not here). Chat runs non-streaming in v1 so errors always arrive before any output.
+
+`model_call` step payload (built by `summarize_request(llm_request) -> dict` and `summarize_response(responses: list[LlmResponse]) -> dict` in `models/routed_llm.py`):
+- `inputs` = `{"system_instruction": str | None, "messages": [{"role": str, "parts": [...]}], "tools": [tool names offered]}` — each part rendered as `{"text": ...}`, `{"function_call": {"name", "args"}}` or `{"function_response": {"name", "response"}}` (so retrieved chunks and tool results the model saw are visible).
+- `outputs` = `{"text": str | None, "function_calls": [{"name", "args"}], "finish_reason": str | None}`.
+- Size cap: `TRACE_FIELD_CAP = 20_000` characters per string value; longer strings are cut and suffixed `"… [truncated N chars]"`. Applied before `Tracer.add_step` (which still redacts secrets).
+- A failed attempt that triggers fallback records its `inputs` on the `fallback` step too, so the replay shows what Gemini was sent before it failed.
 
 - [ ] **Step 1: Write failing tests** (fake `BaseLlm` subclasses that yield a fixed `LlmResponse` or raise):
   - `test_choose_table`: parametrized over all 9 cells above, with quota available and exhausted.
@@ -319,10 +325,14 @@ Routing table for `choose` (`mode` = `settings.effective_routing_mode`):
   - `test_rate_limit_falls_back_and_exhausts`: gemini fake raises an error for which `is_rate_limit` is true → response from qwen fake, `quota.is_available() is False`, steps `["fallback","model_call"]`.
   - `test_non_rate_limit_error_falls_back_without_exhausting`: gemini raises `ConnectionError` → qwen answers, `quota.is_available() is True`.
   - `test_qwen_error_propagates`: mode all_qwen, qwen raises → exception surfaces (no infinite fallback).
+  - `test_model_call_records_request_and_response`: request with system instruction "Be brief", a user message "what is overfitting?", a prior function_response part `{"name": "search_material", "response": {"chunks": ["c1"]}}`, and one tool declared → stored step `inputs.system_instruction == "Be brief"`, the messages include the user text and the function_response, `inputs.tools == ["search_material"]`; `outputs.text` equals the fake's reply.
+  - `test_model_call_records_function_call_output`: fake returns a function_call `search_material(query="x")` → `outputs.function_calls == [{"name": "search_material", "args": {"query": "x"}}]`.
+  - `test_trace_fields_truncated`: a 50_000-char user message → stored text length ≤ `TRACE_FIELD_CAP` + suffix and ends with `"[truncated 30000 chars]"`.
+  - `test_fallback_step_includes_request`: rate-limit fallback → the `fallback` step's inputs contain the user message.
 - [ ] **Step 2–4:** fail → implement → pass. `qwen_complete` gets one integration test marked `@pytest.mark.ollama` (skipped unless `-m ollama`): returns non-empty text without `<think>`.
 - [ ] **Step 5:** Commit `feat: model router with gemini quota and qwen fallback`.
 
-**Decisions to record:** a `BaseLlm` wrapper over ADK callbacks for fallback (one place, transparent to agents); non-streaming v1; how Qwen thinking is disabled.
+**Decisions to record:** a `BaseLlm` wrapper over ADK callbacks for fallback (one place, transparent to agents); non-streaming v1; how Qwen thinking is disabled; full prompt/response stored in `model_call` steps with a 20k-char cap per field (replay must show what the model actually saw, incl. retrieved chunks).
 
 ---
 
