@@ -71,3 +71,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Scrub secrets before storing: secret values everywhere (also in the serialized JSON), and dict keys matched by full name (`api_key`, `token`, `x-api-key`).
 *Rejected:* Redacting on read, or substring key matching.
 *Why:* Nothing sensitive ever reaches disk; substring matching would wrongly hide `max_tokens` and `prompt_token_count`.
+
+## 2026-11-06 — stdlib `logging` for the app logger
+*Chose:* Standard-library `logging` with a rotating file in `data/logs/` and a console handler on stderr.
+*Rejected:* loguru or structlog.
+*Why:* No extra dependency, and every library we use already logs through it. Stderr keeps stdout free for MCP stdio servers.
+
+## 2026-11-06 — Trace id on every log line
+*Chose:* Stamp the current trace id (or `-`) on each log line, and scrub the API key from the final formatted text, tracebacks included.
+*Rejected:* Logging trace ids only inside trace rows.
+*Why:* A log line can be matched to its replay page, and the key cannot leak through an exception message.
