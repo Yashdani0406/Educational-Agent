@@ -33,3 +33,5 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not ollama'"
+markers = ["ollama: needs a running local Ollama with the Qwen model (run with -m ollama)"]
