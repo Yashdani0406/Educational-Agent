@@ -131,13 +131,14 @@ Triggered by every upload, for any number of files:
   - `@tutor`, `@notes`, `@code`, `@progress` force a specific agent.
   - **Left sidebar:** course selector; the **course map** (modules → topics, each topic with a strong / okay / weak coloured dot); links to the side pages; **saved chats** (separate threads, for example a doubt session and a code review).
   - **Side pages:** **Library** (uploads and processing status, module assignment, topic confirmation, delete/replace), **Notes** (browse by module and topic, read, export PDF), **Flashcards** (due count, review), **Progress** (analytics).
-  - **Inside chat:** Markdown, inline **Mermaid** diagrams, code blocks, **source citations** under each answer, quick buttons (*Quiz me on this*, *Explain simpler*), quizzes answered inline, file attachment for code.
+  - **Inside chat:** Markdown, inline **Mermaid** diagrams, code blocks, **source citations** under each answer, quick buttons (*Quiz me on this*, *Explain simpler*), an *Ask another agent* choice under each reply, quizzes answered inline, file attachment for code.
   - **Top bar:** active course, active model, Gemini requests left today.
 - The mockups from the design session are a reference for structure only. "StudyMate" was a placeholder name.
 
 ### 4.6 Agents
 
 **Coordinator.** Routes each message to an agent (ADK multi-agent). `@mentions` bypass routing. Routing should use as little Gemini quota as practical; the mechanism is left to the builder (see §6).
+- **Routing mistakes (added 2026-11-08, agreed by the student):** handled in layers. Deterministic rules run first (`@mention`, pasted code or attachment → Coding). A local few-shot classifier handles the rest, and when unsure it picks the Tutor. Each reply offers **"Ask another agent"**, which re-sends the message to another agent in one click and records the correction. A routing eval set, measured against real Qwen with a ≥ 90% bar, grows with every real misroute. Agents that start costly jobs confirm first.
 
 **Notes maker**
 - Works **only when asked** (for example, "make notes for Module 3" or "notes on gradient descent").
