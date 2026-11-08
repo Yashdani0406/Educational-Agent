@@ -1,0 +1,36 @@
+"""Routing eval set: (message, last_agent, expected). Grows with every real misroute."""
+
+from eduagent.agents.routing import AgentName
+
+ROUTING_CASES: list[tuple[str, AgentName | None, AgentName]] = [
+    ("what is regularization?", None, "tutor"),
+    ("make notes for module 3", None, "notes_maker"),
+    ("how am I doing?", None, "analytics"),
+    ("and why is that?", "tutor", "tutor"),
+    ("what does this python function return when the list is empty", None, "coding"),
+    ("quiz me on decision trees", None, "tutor"),
+    ("can you explain the difference between precision and recall with an example", None, "tutor"),
+    ("i dont understand the backprop slide from tuesday", None, "tutor"),
+    ("prepare revision notes on k-means for my exam", None, "notes_maker"),
+    ("summarise module 5 for me", None, "notes_maker"),
+    ("my sklearn model gives ValueError: Input contains NaN, what's wrong", None, "coding"),
+    ("how do I use pd.merge on two columns", None, "coding"),
+    ("which topics should I revise before the midterm based on my quiz results?", None, "analytics"),
+    ("did my score on the clustering quiz improve?", None, "analytics"),
+    ("what's my weakest topic", None, "analytics"),
+    ("explain recursion simply", None, "tutor"),
+    ("what is the time complexity of quicksort", None, "tutor"),
+    ("ok another example please", "coding", "coding"),
+    ("ok another example please", "tutor", "tutor"),
+    ("thanks! now make flashcards out of this", "tutor", "notes_maker"),
+    ("why is my accuracy 100% on training but 60% on test", None, "tutor"),
+    ("is my for loop in the attached notebook efficient", None, "coding"),
+    ("give me practice questions on hypothesis testing", None, "tutor"),
+    ("how many quizzes have I done this week", None, "analytics"),
+    ("whats the formula for the gini index", None, "tutor"),
+    ("I keep getting confused between bagging and boosting", None, "tutor"),
+    ("can you review my linear regression implementation for bugs", None, "coding"),
+    ("hmm still not clear", "tutor", "tutor"),
+    ("what does random_state do in train_test_split", None, "coding"),
+    ("create a one-page cheat sheet for SVMs", None, "notes_maker"),
+]
