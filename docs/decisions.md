@@ -106,3 +106,28 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `qwen3:4b-instruct` (Qwen3-4B-Instruct-2507, non-thinking, same 2.5 GB).
 *Rejected:* `qwen3:4b`, which Ollama now maps to the thinking-only Qwen3-4B-Thinking-2507.
 *Why:* Measured on this laptop's CPU: routing 0.8 s vs 37 s per message, a tutor answer 10 s vs 116 s, with the same routing and tool-choice accuracy on our checks. Thinking scores higher on hard reasoning benchmarks, but Qwen's jobs here are light work and fallback, where minutes per reply is unusable. Switching back is one `.env` line.
+
+## 2026-11-08 — Routing lives in a custom coordinator agent, not ADK LLM transfer
+*Chose:* A `BaseAgent` coordinator that routes with plain code (mention, code fence or attachment) and a small local Qwen classifier, then runs the chosen sub-agent.
+*Rejected:* ADK's LLM-driven transfer, where a Gemini call decides who answers.
+*Why:* Saves Gemini quota, is deterministic for mentions and code, and is still an ADK agent tree so traces and agent cards work.
+
+## 2026-11-08 — Few-shot router prompt with the previous agent inside the user message
+*Chose:* Examples in the prompt and "Previous agent: ..." at the top of each user message.
+*Rejected:* The previous agent in the system prompt with no examples.
+*Why:* The 4B model ignored the system-prompt version and misrouted follow-ups. Measured on 30 messages: 24/30 before, 30/30 after (about 1 s each).
+
+## 2026-11-08 — "If unsure, answer tutor"
+*Chose:* Unclear or failed classification goes to the previous agent, else the tutor.
+*Rejected:* Asking the student to pick, or erroring.
+*Why:* The tutor is the cheapest wrong answer: it can still help with almost anything.
+
+## 2026-11-08 — Routing eval set that grows from real misroutes
+*Chose:* A 30-message eval test (`ollama` marker, 90% bar) plus a table of real misroutes, each also added to the set.
+*Rejected:* A one-off manual check of the prompt.
+*Why:* Prompt edits can silently break old cases; the set turns every real mistake into a permanent regression check.
+
+## 2026-11-08 — Placeholders instead of half-built agents
+*Chose:* `PlaceholderAgent` replies "<Name> isn't built yet — coming in Plan N." with no model call.
+*Rejected:* Stub agents that call the model with a guess at their job.
+*Why:* Routing and the agent tree work end to end now, and nothing pretends to be finished.
