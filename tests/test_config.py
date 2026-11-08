@@ -24,7 +24,7 @@ def make() -> Settings:
 def test_defaults():
     s = make()
     assert s.routing_mode == "split"
-    assert s.qwen_model == "qwen3:4b"
+    assert s.qwen_model == "qwen3:4b-instruct"
     assert s.db_path == Path("data/study.db")
     assert s.log_level == "INFO"
     assert s.log_dir == Path("data/logs")

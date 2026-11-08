@@ -47,7 +47,7 @@ Each later plan is written (with this same skill) when its predecessor is merged
 - Everything free; Gemini free tier + local Ollama only. No paid APIs.
 - `data/`, `.env`, `.venv/`, `.superpowers/` are git-ignored. **Never commit course material, notes, scores, or keys.** `.env.example` is committed.
 - UI served on `127.0.0.1` only, port **8000**. Ollama at `http://127.0.0.1:11434`.
-- Models: Gemini Flash (setting `GEMINI_MODEL`), `qwen3:4b` via LiteLLM `ollama_chat/`, embeddings `nomic-embed-text`.
+- Models: Gemini Flash (setting `GEMINI_MODEL`), `qwen3:4b-instruct` via LiteLLM `ollama_chat/`, embeddings `nomic-embed-text`.
 - Routing is a **single setting** `ROUTING_MODE` ∈ `split | all_gemini | all_qwen`.
 - API keys never appear in traces, logs, or the UI.
 - Every module logs via `log = logging.getLogger(__name__)` (never `print`). Levels: `DEBUG` = message/course text and model prompts; `INFO` = lifecycle and decisions (startup, route chosen, model chosen); `WARNING` = degraded but working (Gemini fallback, quota exhausted, Ollama down); `ERROR` = failed request, always with `log.exception` so the traceback is kept. Course text is logged only at `DEBUG`.
@@ -62,7 +62,7 @@ Each later plan is written (with this same skill) when its predecessor is merged
 
 1. **Quota day boundary on an IST laptop** — Gemini free quota resets at midnight **Pacific**, not local midnight; Windows has no system tz database, so `zoneinfo` needs the `tzdata` package. Expect the counter to reset at 00:00 America/Los_Angeles. → test `test_resets_at_pacific_midnight` in Task 4.
 2. **Gemini errors that aren't 429** (503, network drop) — spec §4.1 says Qwen is the fallback "when the quota runs out or Gemini errors". Expect the answer to arrive from Qwen, with only a 429 marking quota exhausted. → test `test_non_rate_limit_error_falls_back_without_exhausting` in Task 7.
-3. **Ollama not running / models not pulled at launch** — expect the app to start anyway with a clear banner naming the fix (`ollama serve`, `ollama pull qwen3:4b`), not a stack trace. → tests in Task 11; classifier failure covered in Task 8 (`test_classifier_exception_defaults`).
+3. **Ollama not running / models not pulled at launch** — expect the app to start anyway with a clear banner naming the fix (`ollama serve`, `ollama pull qwen3:4b-instruct`), not a stack trace. → tests in Task 11; classifier failure covered in Task 8 (`test_classifier_exception_defaults`).
 4. **API key leaking into traces or log files** — a tool input, log message, or exception traceback containing the key must be written as `[redacted]`. → test `test_secret_values_redacted_in_steps` in Task 5 and `test_secret_scrubbed_from_message_and_traceback` in Task 6.
 5. **Qwen3 `<think>` blocks** leaking into routing labels or replies — expect them stripped. → test `test_strip_think` in Task 7 and `test_classifier_label_with_think_block` in Task 8.
 
@@ -111,7 +111,7 @@ tests/  (mirrors src: tests/db/, tests/models/, tests/tracing/, tests/agents/, t
 - [ ] **Step 3:** `.gitignore`: `data/`, `.env`, `.venv/`, `.superpowers/`, `__pycache__/`, `*.pyc`, `.pytest_cache/`. `.env.example` lists every Settings field from Task 2 with its default and a comment (`GEMINI_API_KEY=` empty). `LICENSE`: MIT, 2026, Yash Dani. `README.md`: one-paragraph intent + "Setup: see below (filled in Task 11)". `docs/decisions.md`: heading + format line `## <date> — <decision>` / *Chose* / *Rejected* / *Why*.
 - [ ] **Step 4: Write `tests/test_smoke.py`:** `def test_package_imports(): import eduagent; assert eduagent.__version__ == "0.1.0"`.
 - [ ] **Step 5:** `uv run pytest -q` → `1 passed`.
-- [ ] **Step 6:** Make sure Ollama is running (`ollama serve` or the tray app), then `ollama pull qwen3:4b` and `ollama pull nomic-embed-text`; `ollama list` shows both.
+- [ ] **Step 6:** Make sure Ollama is running (`ollama serve` or the tray app), then `ollama pull qwen3:4b-instruct` and `ollama pull nomic-embed-text`; `ollama list` shows both.
 - [ ] **Step 7:** `git status` must not list `data/` or `.env`. Commit: `chore: scaffold uv project, licence, gitignore, plans`.
 
 **Decisions to record:** uv over pip/venv; Python 3.12 over 3.14; src layout; dependencies added per plan, not up-front.
@@ -129,7 +129,7 @@ class Settings(BaseSettings):  # env_file=".env", extra="ignore"
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-flash-latest"   # confirm current free-tier Flash in AI Studio
     gemini_daily_limit: int = 250                # set from AI Studio's real figure
-    qwen_model: str = "qwen3:4b"
+    qwen_model: str = "qwen3:4b-instruct"
     embed_model: str = "nomic-embed-text"
     ollama_url: str = "http://127.0.0.1:11434"
     routing_mode: RoutingMode = "split"
@@ -142,7 +142,7 @@ class Settings(BaseSettings):  # env_file=".env", extra="ignore"
 ```
 
 - [ ] **Step 1: Write failing tests** (use `monkeypatch.setenv` and `Settings(_env_file=None)`):
-  - `test_defaults`: `routing_mode == "split"`, `qwen_model == "qwen3:4b"`, `db_path == Path("data/study.db")`, `log_level == "INFO"`, `log_dir == Path("data/logs")`.
+  - `test_defaults`: `routing_mode == "split"`, `qwen_model == "qwen3:4b-instruct"`, `db_path == Path("data/study.db")`, `log_level == "INFO"`, `log_dir == Path("data/logs")`.
   - `test_no_key_forces_all_qwen`: no key, `ROUTING_MODE=split` → `effective_routing_mode == "all_qwen"`.
   - `test_key_keeps_mode`: key set, `ROUTING_MODE=all_gemini` → `"all_gemini"`.
   - `test_invalid_mode_rejected`: `ROUTING_MODE=fast` → `pydantic.ValidationError`.
@@ -449,7 +449,7 @@ def main() -> None   # Settings(); mkdir data dirs; configure_logging (first, so
 ```
 Warnings (exact copy): no key → `"No GEMINI_API_KEY in .env — running everything on Qwen."`; Ollama unreachable → `"Ollama isn't running. Start it with: ollama serve"`; model missing → `"Model <name> not found. Run: ollama pull <name>"`. Warnings are shown as a dismissible banner at the top of the chat page; the app still starts. (Chroma server start is added to `main` in Plan 2.)
 
-- [ ] **Step 1: Write failing tests:** `test_preflight_all_good` (key set, both models listed → `[]`); `test_preflight_ollama_down` (fetch raises `httpx.ConnectError` → contains `"ollama serve"`); `test_preflight_missing_model` (only `nomic-embed-text:latest` listed → contains `"ollama pull qwen3:4b"`; note Ollama reports tags like `qwen3:4b` and `nomic-embed-text:latest` — match with or without `:latest`); `test_preflight_no_key`.
+- [ ] **Step 1: Write failing tests:** `test_preflight_all_good` (key set, both models listed → `[]`); `test_preflight_ollama_down` (fetch raises `httpx.ConnectError` → contains `"ollama serve"`); `test_preflight_missing_model` (only `nomic-embed-text:latest` listed → contains `"ollama pull qwen3:4b-instruct"`; note Ollama reports tags like `qwen3:4b-instruct` and `nomic-embed-text:latest` — match with or without `:latest`); `test_preflight_no_key`.
 - [ ] **Step 2–4:** fail → implement → pass.
 - [ ] **Step 5:** README: setup (install Ollama, pull both models, install uv, `uv sync`, copy `.env.example` → `.env`, add key from AI Studio, `uv run eduagent`), what works so far, roadmap table, "your data stays in `data/` and is never committed". Screenshot added after Step 6.
 - [ ] **Step 6: Manual end-to-end** (`uv run eduagent`): browser opens on `127.0.0.1:8000`; create a course; new chat; ask "what is overfitting?" → reply labelled **Tutor**, model caption Gemini, quota count drops by ≥1; `@progress hi` → Analytics placeholder; set `ROUTING_MODE=all_qwen`, restart → caption shows Qwen and the top bar says all Qwen; stop Ollama, restart → banner names `ollama serve`. Run the 12 routing checks from `docs/manual-checks.md` and record results there. Check `data/study.db` `trace_steps` contains no API key (`SELECT count(*) FROM trace_steps WHERE input_json LIKE '%<first 8 chars of key>%'` → 0) and `data/logs/eduagent.log` doesn't contain it either; confirm the log shows startup, preflight, each route decision, model used, and (with Gemini key temporarily wrong) a fallback WARNING.

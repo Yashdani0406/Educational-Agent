@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-flash-latest"
     gemini_daily_limit: int = 250
-    qwen_model: str = "qwen3:4b"
+    qwen_model: str = "qwen3:4b-instruct"
     embed_model: str = "nomic-embed-text"
     ollama_url: str = "http://127.0.0.1:11434"
     routing_mode: RoutingMode = "split"

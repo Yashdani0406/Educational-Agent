@@ -126,7 +126,7 @@ class RoutedLlm(BaseLlm):
         self, llm: BaseLlm, label: str, llm_request: LlmRequest, stream: bool
     ) -> list[LlmResponse]:
         # Collected before yielding so any error arrives before output (chat is non-streaming in v1).
-        # The delegate's own id (e.g. "ollama_chat/qwen3:4b") must reach it; ADK's LiteLlm
+        # The delegate's own id (e.g. "ollama_chat/qwen3:4b-instruct") must reach it; ADK's LiteLlm
         # prefers llm_request.model over its own. `label` is only for logs and the trace.
         request = llm_request.model_copy(update={"model": llm.model})
         started = time.perf_counter()

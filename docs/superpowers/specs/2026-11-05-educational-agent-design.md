@@ -65,7 +65,7 @@ A personal study companion for a Master's student in Data Science. The student u
 | Purpose | Model | Notes |
 |---|---|---|
 | Heavy, quality-critical work: detailed notes, teaching, code explanation and review, analytics write-ups, quiz generation | **Gemini Flash** (current free-tier Flash model) via Gemini API | Primary |
-| Light, frequent work: topic suggestion and tagging, flashcard answer grading, simple checks, short summaries | **`qwen3:4b`** via Ollama | Also the **automatic fallback for everything** when the Gemini quota runs out or Gemini errors |
+| Light, frequent work: topic suggestion and tagging, flashcard answer grading, simple checks, short summaries | **`qwen3:4b-instruct`** via Ollama | Also the **automatic fallback for everything** when the Gemini quota runs out or Gemini errors |
 | Embeddings | **`nomic-embed-text`** via Ollama | Local, so ingestion never uses Gemini quota |
 
 - The student agreed to this split (the "split by job" recommendation).
@@ -77,7 +77,8 @@ A personal study companion for a Master's student in Data Science. The student u
   - **Chat** (tutor doubts, code questions, analytics) continues on Qwen.
   - **Heavy jobs** (notes for a module or topic, generating a quiz set) are **queued until the quota resets**, with a "run on Qwen anyway (slow)" button. All heavy generation runs as resumable background jobs with visible progress.
   - Qwen may need simpler prompts or a reduced tool set to be reliable.
-  - If testing shows `qwen3:4b` is too weak, `qwen3:8b` (5.2 GB) may be swapped in through the same setting.
+  - If testing shows `qwen3:4b-instruct` is too weak, `qwen3:8b` (5.2 GB) may be swapped in through the same setting.
+- **Changed 2026-11-08:** the default `qwen3:4b` tag is now a thinking-only model (37 s per routing call on this CPU); switched to the non-thinking `qwen3:4b-instruct` (0.8 s). See docs/decisions.md.
 
 ### 4.2 Knowledge base and storage
 All data lives under `data/` inside the project, and **`data/` is git-ignored**.
@@ -243,7 +244,7 @@ Triggered by every upload, for any number of files:
 ```
 Browser ⇄ Main Python app (NiceGUI + ADK agents + upload queue + model router)  :8000
               ├─ Gemini API (internet)
-              ├─ Ollama  :11434  (qwen3:4b, nomic-embed-text)
+              ├─ Ollama  :11434  (qwen3:4b-instruct, nomic-embed-text)
               ├─ Chroma server (data/chroma)
               └─ MCP servers via stdio: knowledge-base, study-records, filesystem, fetch, web search, arXiv
                      └─ data/study.db, data/sources, data/notes
@@ -308,7 +309,7 @@ A separate page that visualises every component of the project and how they conn
 - A running **`docs/decisions.md`** records each significant "why this, not that" choice in a few lines, so the reasoning lives in the repo for later review and for anyone reading the GitHub project. **(my call)**
 
 ## 5. Install list (for the README)
-- **Ollama** (Windows installer), then `ollama pull qwen3:4b` and `ollama pull nomic-embed-text`.
+- **Ollama** (Windows installer), then `ollama pull qwen3:4b-instruct` and `ollama pull nomic-embed-text`.
 - **uv**, then a Python 3.12 environment.
 - **Python packages:** `google-adk`, `litellm`, `mcp`, `chromadb`, `nicegui`, `playwright` (plus `playwright install chromium`), and the parsing libraries.
 - **Gemini API key** from Google AI Studio, stored in `.env`.
