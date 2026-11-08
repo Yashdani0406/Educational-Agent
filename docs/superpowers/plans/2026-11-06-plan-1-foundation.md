@@ -396,7 +396,7 @@ Reply with exactly one word: tutor, notes_maker, coding or analytics.
 Routing eval set (`tests/agents/routing_cases.py`, `ROUTING_CASES: list[tuple[str, AgentName | None, AgentName]]` = message, last_agent, expected; none of these may be copied into the prompt's examples):
 | message | last | expected |
 |---|---|---|
-| what is overfitting? | – | tutor |
+| what is regularization? | – | tutor |
 | make notes for module 3 | – | notes_maker |
 | how am I doing? | – | analytics |
 | and why is that? | tutor | tutor |
