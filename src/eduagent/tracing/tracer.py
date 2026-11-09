@@ -21,7 +21,8 @@ WHAT_IT_DOES = (
 )
 
 StepType = Literal[
-    "route", "agent", "tool_call", "tool_result", "model_call", "fallback", "answer", "error"
+    "route", "agent", "tool_call", "tool_result", "model_call", "fallback", "answer", "error",
+    "reroute",
 ]
 
 current_trace_id: ContextVar[str | None] = ContextVar("current_trace_id", default=None)
