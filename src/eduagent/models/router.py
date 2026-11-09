@@ -8,6 +8,7 @@ from eduagent.config import Settings
 from eduagent.models.quota import QuotaTracker
 
 log = logging.getLogger(__name__)
+_log = log  # `choose` has a `log` parameter that shadows the module logger
 
 WHAT_IT_DOES = (
     "Chooses between Gemini and the local Qwen model for each job, based on the "
@@ -37,7 +38,7 @@ class ModelRouter:
             return ModelChoice("gemini", self._settings.gemini_model, reason)
         return self._qwen("gemini quota exhausted")
 
-    def choose(self, job: JobKind) -> ModelChoice:
+    def choose(self, job: JobKind, *, log: bool = True) -> ModelChoice:
         mode = self._settings.effective_routing_mode
         if mode == "all_qwen":
             choice = self._qwen("mode")
@@ -47,5 +48,6 @@ class ModelRouter:
             choice = self._qwen("job split")
         else:
             choice = self._gemini_or_qwen("job split")
-        log.info("route job=%s -> %s (%s)", job, choice.model_id, choice.reason)
+        if log:
+            _log.info("route job=%s -> %s (%s)", job, choice.model_id, choice.reason)
         return choice

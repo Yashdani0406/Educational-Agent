@@ -57,3 +57,12 @@ def test_no_key_forces_qwen(tmp_path):
                         data_dir=tmp_path)
     choice = ModelRouter(settings, QuotaTracker(db, 10)).choose("chat")
     assert choice.provider == "qwen"
+
+
+def test_choose_log_flag(tmp_path, caplog):
+    router = make(tmp_path, "split", False)
+    with caplog.at_level("INFO", logger="eduagent.models.router"):
+        router.choose("chat", log=False)
+        assert caplog.records == []
+        router.choose("chat")
+    assert [r.getMessage() for r in caplog.records] == ["route job=chat -> gem (job split)"]

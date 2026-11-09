@@ -40,7 +40,7 @@ class UiState:
 
 
 def _status_texts(services: Services) -> tuple[str, str]:
-    choice = services.router.choose("chat")
+    choice = services.router.choose("chat", log=False)
     model = f"Model: {choice.provider} · {choice.model_id}"
     if services.settings.effective_routing_mode == "all_qwen":
         return model, "Gemini: off (all Qwen)"
