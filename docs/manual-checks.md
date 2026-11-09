@@ -23,3 +23,22 @@ Add every real misroute here **and** to `tests/agents/routing_cases.py`.
 
 | Message | Last agent | Routed to | Should be | Date |
 |---|---|---|---|---|
+
+## End-to-end check (Plan 1)
+
+Run with `uv run eduagent`. Fill in the result column as you go.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Browser opens on `127.0.0.1:8000` | |
+| 2 | Create a course, start a new chat | |
+| 3 | Ask "what is overfitting?": reply labelled **Tutor**, model caption Gemini, quota count drops by at least 1 | |
+| 4 | `@progress hi` shows the Analytics placeholder | |
+| 5 | Set `ROUTING_MODE=all_qwen`, restart: caption shows Qwen and the top bar says all Qwen | |
+| 6 | Stop Ollama, restart: banner names `ollama serve` | |
+| 7 | Routing eval (`uv run pytest -m ollama tests/agents -q -s`): score recorded in the Routing section above | |
+| 8 | Click "Ask instead: Coding" under a Tutor reply: the trace has a `reroute` step | |
+| 9 | `SELECT count(*) FROM trace_steps WHERE input_json LIKE '%<first 8 chars of key>%'` on `data/study.db` returns 0 | |
+| 10 | `data/logs/eduagent.log` does not contain the key | |
+| 11 | Log shows start-up, preflight, each route decision and the model used | |
+| 12 | With the Gemini key temporarily wrong, the log shows a fallback WARNING | |
