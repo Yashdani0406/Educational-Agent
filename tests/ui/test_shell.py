@@ -69,6 +69,22 @@ async def test_warnings_banner(tmp_path, make_user, build_services):
         await user.should_not_see(msg)
 
 
+async def test_dismissed_warning_stays_dismissed(tmp_path, make_user, build_services):
+    msg = "Ollama isn't running. Start it with: ollama serve"
+    other = "No GEMINI_API_KEY in .env"
+    services = build_services(tmp_path, [msg, other])
+    async with make_user(services) as user:
+        await user.open("/")
+        user.find("Dismiss").click()
+        assert len(services.warnings) == 1
+        await user.open("/")
+        remaining, = services.warnings
+        await user.should_see(remaining)
+        await user.should_see("Dismiss")
+        assert {msg, other} - {remaining}
+        await user.should_not_see(({msg, other} - {remaining}).pop())
+
+
 async def test_history_reload_shows_chip_but_no_buttons(user, services):
     thread = services.threads.create(None)
     services.chat.canned_history = [("user", "hi"), ("tutor", "hello there")]

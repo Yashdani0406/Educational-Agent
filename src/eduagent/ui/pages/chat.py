@@ -106,11 +106,13 @@ class ChatView:
 
 
 def _banner(warnings: list[str]) -> None:
-    for message in warnings:
+    for message in list(warnings):
         row_classes = "w-full max-w-3xl mx-auto items-center no-wrap q-pa-sm rounded-borders"
         with ui.row().classes(row_classes).style(f"background: {NOTICE_BG}") as row:
             ui.label(message).classes("grow")
-            ui.button("Dismiss", on_click=row.delete).props("flat dense no-caps")
+            ui.button(
+                "Dismiss", on_click=lambda m=message, r=row: (warnings.remove(m), r.delete())
+            ).props("flat dense no-caps")
 
 
 def register(services: Services, state: UiState) -> None:
