@@ -7,6 +7,10 @@ from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
 
+WHAT_IT_DOES = (
+    "Opens the local SQLite database and applies its numbered schema migrations, so every other part of the app shares one safe storage layer."
+)
+
 log = logging.getLogger(__name__)
 
 

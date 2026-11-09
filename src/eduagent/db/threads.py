@@ -7,6 +7,10 @@ from datetime import UTC, datetime
 from eduagent.db.database import Database
 
 
+WHAT_IT_DOES = (
+    "Keeps the list of saved chat threads per course so conversations can be reopened."
+)
+
 @dataclass(frozen=True)
 class Thread:
     id: str

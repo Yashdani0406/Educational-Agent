@@ -7,6 +7,10 @@ from datetime import UTC, datetime
 from eduagent.db.database import Database
 
 
+WHAT_IT_DOES = (
+    "Stores the student's courses, their modules and topics in the local database."
+)
+
 @dataclass(frozen=True)
 class Course:
     id: int

@@ -6,6 +6,10 @@ from typing import Literal
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+WHAT_IT_DOES = (
+    "Loads the app's settings (models, routing mode, keys, folders) from the environment and `.env`, and works out which routing mode is really in effect."
+)
+
 RoutingMode = Literal["split", "all_gemini", "all_qwen"]
 
 

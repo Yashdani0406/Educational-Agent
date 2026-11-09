@@ -9,6 +9,10 @@ from eduagent.config import Settings
 from eduagent.tracing import current_trace_id
 from eduagent.tracing.redact import scrub
 
+WHAT_IT_DOES = (
+    "Sets up logging to a rotating file and the console, tags each line with the current trace id, and scrubs secrets before anything is written."
+)
+
 LOG_FORMAT = "%(asctime)s %(levelname)-7s [%(name)s] trace=%(trace_id)s %(message)s"
 NOISY_LIBRARIES = ("litellm", "LiteLLM", "httpx", "httpcore", "google_genai", "urllib3", "watchfiles")
 

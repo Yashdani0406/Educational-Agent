@@ -4,6 +4,10 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+WHAT_IT_DOES = (
+    "Strips API keys, tokens and other secrets from any data before it is written to a trace."
+)
+
 REDACTED = "[redacted]"
 
 _SENSITIVE_KEY = re.compile(
