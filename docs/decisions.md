@@ -171,3 +171,18 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Serve the UI on `127.0.0.1:8000` only.
 *Rejected:* Binding to `0.0.0.0` so other devices can connect.
 *Why:* The app has no login and holds personal course material, so it should not be reachable from the network.
+
+## 2026-11-09 — Qwen on CPU by default
+*Chose:* Send Ollama `num_gpu=0` on every Qwen request unless `OLLAMA_USE_GPU=true`.
+*Rejected:* Ollama's automatic partial GPU offload (3 of 37 layers on the 2 GB MX570).
+*Why:* Measured no speed gain (about 10 tok/s either way), and the GPU load crashed Ollama once, which failed the routing classifier.
+
+## 2026-11-09 — Gemini requests time out after 30 s
+*Chose:* Give the Gemini client a 30 s request timeout so a hung call raises and the Qwen fallback runs.
+*Rejected:* No timeout (the library default).
+*Why:* A hung call never errors, so the fallback never triggered and the student sat on "Thinking…" indefinitely.
+
+## 2026-11-09 — Mermaid labels: prompt rule plus deterministic quoting
+*Chose:* Tell the tutor to quote every node label, and also quote labels containing brackets before display.
+*Rejected:* Prompt-only (small models still slip) or showing the raw diagram code on a syntax error.
+*Why:* An unquoted label with parentheses is a Mermaid syntax error; a small deterministic fix guarantees the diagram draws.
