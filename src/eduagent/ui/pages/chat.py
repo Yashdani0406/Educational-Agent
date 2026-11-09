@@ -7,6 +7,7 @@ from eduagent.agents.routing import AGENT_NAMES, DISPLAY_NAMES, MENTIONS
 from eduagent.chat.service import AgentReply
 from eduagent.services import Services
 from eduagent.ui.frame import UiState, page_frame
+from eduagent.ui.mermaid import quote_mermaid_labels
 from eduagent.ui.theme import MUTED, NOTICE_BG, PRIMARY
 
 WHAT_IT_DOES = (
@@ -56,7 +57,7 @@ class ChatView:
                 ui.chip(reply.display_name).props("dense outline color=primary")
                 if user_text is not None and reply.model:
                     ui.label(reply.model).classes("text-caption").style(f"color: {MUTED}")
-            ui.markdown(reply.text, extras=_MD_EXTRAS)
+            ui.markdown(quote_mermaid_labels(reply.text), extras=_MD_EXTRAS)
             if user_text is not None and reply.agent != "system":
                 with ui.row().classes("items-center gap-1"):
                     ui.label("Ask instead:").classes("text-caption").style(f"color: {MUTED}")

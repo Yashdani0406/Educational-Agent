@@ -76,3 +76,11 @@ async def test_history_reload_shows_chip_but_no_buttons(user, services):
     await user.should_see("Tutor")
     await user.should_see("hello there")
     await user.should_not_see("Ask instead:")
+
+
+async def test_history_mermaid_labels_are_quoted_before_render(user, services):
+    thread = services.threads.create(None)
+    block = "```mermaid\ngraph TD\n  A[Start] --> B[Loss (error)]\n```"
+    services.chat.canned_history = [("user", "hi"), ("tutor", block)]
+    await user.open(f"/chat/{thread.id}")
+    await user.should_see('B["Loss (error)"]')
