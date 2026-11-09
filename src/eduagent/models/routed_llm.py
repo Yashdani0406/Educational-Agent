@@ -27,6 +27,8 @@ WHAT_IT_DOES = (
 )
 
 TRACE_FIELD_CAP = 20_000
+GEMINI_TIMEOUT_S = 30  # a hung Gemini call never raises, so the Qwen fallback needs a deadline
+ERROR_MESSAGE_CAP = 200
 
 
 def is_rate_limit(exc: BaseException) -> bool:
@@ -160,13 +162,16 @@ class RoutedLlm(BaseLlm):
             except Exception as e:
                 if is_rate_limit(e):
                     self.quota.mark_exhausted()
-                log.warning("gemini failed (%s), falling back to qwen", type(e).__name__)
+                message = str(e)[:ERROR_MESSAGE_CAP]
+                log.warning(
+                    "gemini failed (%s: %s), falling back to qwen", type(e).__name__, message
+                )
                 trace_id = current_trace_id.get()
                 if trace_id:
                     self.tracer.add_step(
                         trace_id, "fallback", "model_router",
                         inputs=_cap(summarize_request(llm_request)),
-                        outputs={"error": type(e).__name__},
+                        outputs={"error": type(e).__name__, "message": message},
                         model=choice.model_id,
                     )
                 label = self.qwen.model.removeprefix("ollama_chat/")
@@ -182,10 +187,13 @@ def build_routed_llm(
 ) -> RoutedLlm:
     key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else ""
     # ADK's Gemini forwards client_kwargs to google.genai.Client, so the key is passed explicitly.
-    gemini = Gemini(
-        model=settings.gemini_model,
-        client_kwargs={"api_key": key} if key.strip() else None,
-    )
+    # HttpOptions.timeout is in milliseconds.
+    client_kwargs: dict[str, Any] = {
+        "http_options": types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000)
+    }
+    if key.strip():
+        client_kwargs["api_key"] = key
+    gemini = Gemini(model=settings.gemini_model, client_kwargs=client_kwargs)
     qwen = LiteLlm(
         model=f"ollama_chat/{settings.qwen_model}",
         api_base=settings.ollama_url,

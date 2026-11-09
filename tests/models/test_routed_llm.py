@@ -114,11 +114,12 @@ async def test_rate_limit_falls_back_and_exhausts(tmp_path, caplog):
     assert env.quota.is_available() is False
     assert [s.step_type for s in env.steps()] == ["fallback", "model_call"]
     assert env.steps()[0].component == "model_router"
-    assert env.steps()[0].outputs == {"error": "ClientError"}
+    assert env.steps()[0].outputs["error"] == "ClientError"
     assert env.qwen.seen_models == ["ollama_chat/qw"]
     assert any(
         r.levelno == logging.WARNING
-        and r.getMessage() == "gemini failed (ClientError), falling back to qwen"
+        and r.getMessage().startswith("gemini failed (ClientError: ")
+        and r.getMessage().endswith("), falling back to qwen")
         for r in caplog.records
     )
 
@@ -230,3 +231,43 @@ async def test_qwen_think_is_stripped_but_gemini_is_untouched(tmp_path):
     (tmp_path / "g").mkdir()
     env = Env(tmp_path / "g", gemini=FakeLlm(model="gem", reply="<think>x</think> hi"))
     assert text_of(await run(env, traced=False)) == "<think>x</think> hi"
+
+
+@pytest.mark.parametrize("key", ["k", None])
+def test_build_routed_llm_gives_gemini_a_timeout(tmp_path, key):
+    from eduagent.models.routed_llm import GEMINI_TIMEOUT_S, build_routed_llm
+
+    env = Env(tmp_path)
+    settings = Settings(
+        _env_file=None, gemini_api_key=SecretStr(key) if key else None, data_dir=tmp_path
+    )
+    llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
+    assert GEMINI_TIMEOUT_S == 30
+    http_options = llm.gemini.client_kwargs["http_options"]
+    assert http_options.timeout == 30_000  # HttpOptions.timeout is in milliseconds
+    if key:  # building a real client needs a key; proves ADK keeps our timeout
+        assert llm.gemini.api_client._api_client._http_options.timeout == 30_000
+
+
+async def test_gemini_timeout_falls_back_with_message(tmp_path, caplog):
+    err = TimeoutError("read timed out after 30s")
+    env = Env(tmp_path, gemini=FakeLlm(model="gem", error=err))
+    with caplog.at_level(logging.WARNING):
+        out = await run(env)
+    assert text_of(out) == "from qwen"
+    assert env.quota.is_available() is True
+    assert env.steps()[0].outputs == {
+        "error": "TimeoutError", "message": "read timed out after 30s",
+    }
+    assert any(
+        r.getMessage() == "gemini failed (TimeoutError: read timed out after 30s), falling back to qwen"
+        for r in caplog.records
+    )
+
+
+async def test_fallback_message_truncated_to_200_chars(tmp_path, caplog):
+    env = Env(tmp_path, gemini=FakeLlm(model="gem", error=RuntimeError("x" * 500)))
+    with caplog.at_level(logging.WARNING):
+        await run(env)
+    assert env.steps()[0].outputs["message"] == "x" * 200
+    assert any("x" * 200 + ")" in r.getMessage() for r in caplog.records)
