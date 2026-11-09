@@ -271,3 +271,16 @@ async def test_fallback_message_truncated_to_200_chars(tmp_path, caplog):
         await run(env)
     assert env.steps()[0].outputs["message"] == "x" * 200
     assert any("x" * 200 + ")" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("use_gpu, expected", [(False, {"num_gpu": 0}), (True, {})])
+def test_build_routed_llm_qwen_cpu_option(tmp_path, use_gpu, expected):
+    from eduagent.models.routed_llm import build_routed_llm
+
+    env = Env(tmp_path)
+    settings = Settings(
+        _env_file=None, gemini_api_key=SecretStr("k"), data_dir=tmp_path, ollama_use_gpu=use_gpu
+    )
+    llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
+    extra = {k: v for k, v in llm.qwen._additional_args.items() if k == "num_gpu"}
+    assert extra == expected

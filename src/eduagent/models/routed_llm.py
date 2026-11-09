@@ -14,7 +14,7 @@ from google.genai.errors import ClientError
 
 from eduagent.config import Settings
 from eduagent.models.quota import QuotaTracker
-from eduagent.models.qwen import strip_think
+from eduagent.models.qwen import ollama_options, strip_think
 from eduagent.models.router import JobKind, ModelRouter
 from eduagent.tracing.tracer import Tracer, current_trace_id
 
@@ -197,6 +197,7 @@ def build_routed_llm(
     qwen = LiteLlm(
         model=f"ollama_chat/{settings.qwen_model}",
         api_base=settings.ollama_url,
+        **ollama_options(settings),
     )
     return RoutedLlm(
         model=f"routed/{job}", job=job, router=router, quota=quota, tracer=tracer,

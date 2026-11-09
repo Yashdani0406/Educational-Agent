@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     qwen_model: str = "qwen3:4b-instruct"
     embed_model: str = "nomic-embed-text"
     ollama_url: str = "http://127.0.0.1:11434"
+    ollama_use_gpu: bool = False
     routing_mode: RoutingMode = "split"
     data_dir: Path = Path("data")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

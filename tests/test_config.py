@@ -8,6 +8,7 @@ from eduagent.config import Settings
 ENV_VARS = [
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_DAILY_LIMIT", "QWEN_MODEL",
     "EMBED_MODEL", "OLLAMA_URL", "ROUTING_MODE", "DATA_DIR", "LOG_LEVEL",
+    "OLLAMA_USE_GPU",
 ]
 
 
@@ -28,6 +29,7 @@ def test_defaults():
     assert s.db_path == Path("data/study.db")
     assert s.log_level == "INFO"
     assert s.log_dir == Path("data/logs")
+    assert s.ollama_use_gpu is False
 
 
 def test_sessions_db_url():

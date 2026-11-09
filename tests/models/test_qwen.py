@@ -1,7 +1,34 @@
+import litellm
 import pytest
 
 from eduagent.config import Settings
 from eduagent.models.qwen import qwen_complete, strip_think
+
+
+class _Reply:
+    choices = [type("C", (), {"message": type("M", (), {"content": "hi"})()})()]
+
+
+async def _kwargs_sent(monkeypatch, settings):
+    seen = {}
+
+    async def fake_acompletion(**kwargs):
+        seen.update(kwargs)
+        return _Reply()
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    await qwen_complete("hello", settings)
+    return seen
+
+
+async def test_qwen_complete_forces_cpu_by_default(monkeypatch):
+    seen = await _kwargs_sent(monkeypatch, Settings(_env_file=None))
+    assert seen["num_gpu"] == 0
+
+
+async def test_qwen_complete_leaves_gpu_to_ollama_when_enabled(monkeypatch):
+    seen = await _kwargs_sent(monkeypatch, Settings(_env_file=None, ollama_use_gpu=True))
+    assert "num_gpu" not in seen
 
 
 def test_strip_think():
