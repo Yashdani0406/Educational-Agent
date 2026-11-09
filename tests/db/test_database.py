@@ -11,8 +11,16 @@ def db(tmp_path):
 
 
 def test_migrate_fresh_and_idempotent(db):
-    assert db.migrate() == 1
-    assert db.migrate() == 1
+    assert db.migrate() == 2
+    assert db.migrate() == 2
+
+
+def test_trace_steps_index_exists(db):
+    db.migrate()
+    with db.connect() as conn:
+        rows = conn.execute("PRAGMA index_list(trace_steps)").fetchall()
+    index = next(r for r in rows if r["name"] == "idx_trace_steps_trace_seq")
+    assert index["unique"] == 1
 
 
 def test_wal_and_foreign_keys(db):
