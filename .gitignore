@@ -2,3 +2,6 @@ data/
 .env
 .venv/
 .superpowers/
+__pycache__/
+*.pyc
+.pytest_cache/

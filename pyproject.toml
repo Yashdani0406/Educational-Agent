@@ -1,0 +1,39 @@
+[project]
+name = "eduagent"
+version = "0.1.0"
+description = "Local study companion: Google ADK agents, NiceGUI UI, Gemini/Ollama"
+readme = "README.md"
+authors = [
+    { name = "Yash Dani", email = "yash.dani0406@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "google-adk>=2.13.0",
+    "httpx>=0.28.1",
+    "litellm>=1.108.1",
+    "nicegui>=4.0.0",
+    "pydantic-settings>=2.16.2",
+    "sqlalchemy[asyncio]>=2.1.8",
+    "tzdata>=2026.6",
+]
+
+[project.scripts]
+eduagent = "eduagent.launcher:main"
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not ollama'"
+markers = ["ollama: needs a running local Ollama with the Qwen model (run with -m ollama)"]
