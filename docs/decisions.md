@@ -141,3 +141,23 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* One id for both: creating a thread creates the session with the same id.
 *Rejected:* A separate id with a mapping table.
 *Why:* Reopening a saved chat is a single lookup, and the two can never point at different conversations.
+
+## 2026-11-09 — NiceGUI for the front end
+*Chose:* NiceGUI (pure Python, Quasar components, one persistent websocket, multi-page routes, ECharts available later).
+*Rejected:* Streamlit and Gradio.
+*Why:* Streamlit reruns the whole script on every click and Gradio is built for single-screen demos. This app needs several pages, a live sidebar and a chat that keeps its state.
+
+## 2026-11-09 — One calm palette
+*Chose:* A muted blue primary (`#35618C`) on a near-white background, with one system sans font and four mastery-dot colours (green, amber, red, grey for untested).
+*Rejected:* Dark theme, gradients, animated accents.
+*Why:* A study tool is used for long sessions, so it should stay quiet. Colour is kept for meaning: the mastery dots.
+
+## 2026-11-09 — Non-streaming replies with a spinner
+*Chose:* Wait for the full reply and show a "Thinking…" spinner with the input disabled.
+*Rejected:* Token streaming.
+*Why:* Several agents and tools can run before the final answer, and the trace records one finished answer. Streaming would add complexity for little gain in a single-user local app.
+
+## 2026-11-09 — One-click "Ask another agent"
+*Chose:* Small "Ask instead:" buttons under each reply that resend the same question to another agent.
+*Rejected:* Making the student retype the question with an `@mention`.
+*Why:* A misroute then costs one click, and each click is recorded as a reroute step, so it becomes eval data for the router.
