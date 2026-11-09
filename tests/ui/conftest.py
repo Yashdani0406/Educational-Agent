@@ -28,7 +28,7 @@ class FakeChat:
     threads: ThreadsRepo
     sent: list = field(default_factory=list)
     resent: list = field(default_factory=list)
-    delay: object = None
+    canned_history: list = field(default_factory=list)
 
     async def new_thread(self, course_id):
         return self.threads.create(course_id)
@@ -42,7 +42,7 @@ class FakeChat:
         return [AgentReply(agent, DISPLAY_NAMES[agent], f"{agent} says hi", None, "t2")]
 
     async def history(self, thread_id):
-        return []
+        return self.canned_history
 
 
 def make_services(tmp_path, warnings=None) -> Services:

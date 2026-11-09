@@ -9,6 +9,9 @@ BACKGROUND = "#F7F8FA"
 SURFACE = "#FFFFFF"
 TEXT = "#1F2933"
 MUTED = "#6B7785"
+NOTICE_BG = "#F3EEDD"  # muted sand for the warnings banner
+WEAK_BELOW = 60  # mastery is 0-100: below 60 is weak
+STRONG_FROM = 80  # 80 and up is strong; in between is okay
 MASTERY = {"strong": "#3A8D5C", "okay": "#C9A227", "weak": "#C0504D", "untested": "#9AA5B1"}
 
 _FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
@@ -18,9 +21,9 @@ def mastery_color(mastery: float | None) -> str:
     """Dot colour for a topic: grey until it has been tested."""
     if mastery is None:
         return MASTERY["untested"]
-    if mastery >= 0.75:
+    if mastery >= STRONG_FROM:
         return MASTERY["strong"]
-    if mastery >= 0.4:
+    if mastery >= WEAK_BELOW:
         return MASTERY["okay"]
     return MASTERY["weak"]
 

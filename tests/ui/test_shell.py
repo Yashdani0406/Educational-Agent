@@ -67,3 +67,12 @@ async def test_warnings_banner(tmp_path, make_user, build_services):
         await user.should_see("Dismiss")
         user.find("Dismiss").click()
         await user.should_not_see(msg)
+
+
+async def test_history_reload_shows_chip_but_no_buttons(user, services):
+    thread = services.threads.create(None)
+    services.chat.canned_history = [("user", "hi"), ("tutor", "hello there")]
+    await user.open(f"/chat/{thread.id}")
+    await user.should_see("Tutor")
+    await user.should_see("hello there")
+    await user.should_not_see("Ask instead:")

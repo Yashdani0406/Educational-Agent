@@ -7,7 +7,7 @@ from eduagent.agents.routing import AGENT_NAMES, DISPLAY_NAMES, MENTIONS
 from eduagent.chat.service import AgentReply
 from eduagent.services import Services
 from eduagent.ui.frame import UiState, page_frame
-from eduagent.ui.theme import MUTED, PRIMARY
+from eduagent.ui.theme import MUTED, NOTICE_BG, PRIMARY
 
 WHAT_IT_DOES = (
     "Shows a saved chat, sends what you type to the agents and labels each answer "
@@ -107,7 +107,7 @@ class ChatView:
 def _banner(warnings: list[str]) -> None:
     for message in warnings:
         row_classes = "w-full max-w-3xl mx-auto items-center no-wrap q-pa-sm rounded-borders"
-        with ui.row().classes(row_classes).style("background: #FFF6DD") as row:
+        with ui.row().classes(row_classes).style(f"background: {NOTICE_BG}") as row:
             ui.label(message).classes("grow")
             ui.button("Dismiss", on_click=row.delete).props("flat dense no-caps")
 
