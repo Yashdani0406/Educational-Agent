@@ -31,6 +31,23 @@ async def test_qwen_complete_leaves_gpu_to_ollama_when_enabled(monkeypatch):
     assert "num_gpu" not in seen
 
 
+async def test_qwen_complete_sends_no_temperature_by_default(monkeypatch):
+    seen = await _kwargs_sent(monkeypatch, Settings(_env_file=None))
+    assert "temperature" not in seen
+
+
+async def test_qwen_complete_passes_temperature(monkeypatch):
+    seen = {}
+
+    async def fake_acompletion(**kwargs):
+        seen.update(kwargs)
+        return _Reply()
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    await qwen_complete("hello", Settings(_env_file=None), temperature=0)
+    assert seen["temperature"] == 0
+
+
 def test_strip_think():
     assert strip_think("<think>hmm</think>\n tutor") == "tutor"
     assert strip_think("<think>unclosed tutor") == ""

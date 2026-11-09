@@ -26,12 +26,21 @@ def strip_think(text: str) -> str:
     return _THINK_OPEN.sub("", text).strip()
 
 
-def ollama_options(settings: Settings) -> dict[str, int]:
+def ollama_options(settings: Settings) -> dict[str, float]:
     """Extra litellm kwargs for Ollama; litellm puts unknown ones into Ollama's request `options`."""
     return {} if settings.ollama_use_gpu else {"num_gpu": 0}
 
 
-async def qwen_complete(prompt: str, settings: Settings, *, system: str | None = None) -> str:
+async def qwen_complete(
+    prompt: str,
+    settings: Settings,
+    *,
+    system: str | None = None,
+    temperature: float | None = None,
+) -> str:
+    extra = ollama_options(settings)
+    if temperature is not None:
+        extra["temperature"] = temperature
     messages = [{"role": "user", "content": prompt}]
     if system:
         messages.insert(0, {"role": "system", "content": system})
@@ -40,6 +49,6 @@ async def qwen_complete(prompt: str, settings: Settings, *, system: str | None =
         model=f"ollama_chat/{settings.qwen_model}",
         messages=messages,
         api_base=settings.ollama_url,
-        **ollama_options(settings),
+        **extra,
     )
     return strip_think(response.choices[0].message.content or "")

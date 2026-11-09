@@ -39,6 +39,7 @@ Agents:
 - analytics: the student's OWN performance: progress, scores, mastery, weak/strong topics, quiz history, "how am I doing".
 
 Rules:
+- Decide by the student's GOAL, not the output format. Diagrams, flowcharts, charts, tables and examples are formats every agent can use: a diagram that explains a concept is tutor, a diagram inside notes is notes_maker, a chart of the student's own results is analytics, a diagram of the student's code is coding.
 - Each message starts with "Previous agent: <name or none>". Short follow-ups ("why?", "more", "another example", "I don't get it") stay with the previous agent.
 - Explaining a concept is tutor, even if it is a coding-related concept like recursion or Big-O, unless the student is asking about specific code or a library call.
 - If unsure, answer tutor.
@@ -55,8 +56,14 @@ Examples:
 (previous agent: coding) "show me another one" -> coding
 (previous agent: tutor) "why?" -> tutor
 (previous agent: analytics) "and last month?" -> analytics
+"explain the bias-variance tradeoff with a diagram" -> tutor
+"notes on SVMs with diagrams" -> notes_maker
+"graph my progress in statistics" -> analytics
+"draw a flowchart of my train() function" -> coding
 
-Reply with exactly one word: tutor, notes_maker, coding or analytics."""
+Reply in exactly two lines:
+Goal: <in a few words, what the student wants to get>
+Agent: <one of tutor, notes_maker, coding, analytics>"""
 
 
 def parse_mention(text: str) -> tuple[AgentName | None, str]:
@@ -82,7 +89,10 @@ def classifier_message(text: str, last_agent: AgentName | None) -> str:
 def make_qwen_classifier(settings: Settings) -> Classifier:
     async def classify(text: str, last_agent: AgentName | None) -> str:
         return await qwen_complete(
-            classifier_message(text, last_agent), settings, system=ROUTER_PROMPT
+            classifier_message(text, last_agent),
+            settings,
+            system=ROUTER_PROMPT,
+            temperature=0,
         )
 
     return classify
@@ -106,7 +116,10 @@ async def route(
     except Exception:
         log.warning("Routing classifier failed; using default agent", exc_info=True)
         return fallback
-    positions = {a: raw.lower().find(a) for a in AGENT_NAMES}
+    lowered = raw.lower()
+    # The goal line may mention agent-like words; only the text after the last "agent:" counts.
+    searched = lowered.rsplit("agent:", 1)[-1] if "agent:" in lowered else lowered
+    positions = {a: searched.find(a) for a in AGENT_NAMES}
     hits = {a: i for a, i in positions.items() if i >= 0}
     found = min(hits, key=hits.get) if hits else None
     log.debug("classifier raw label %r for message %r", raw, text)
