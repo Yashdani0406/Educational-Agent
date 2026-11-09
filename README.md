@@ -18,6 +18,7 @@ A local, pure-Python study companion. Upload your course material, then chat wit
    ```
    uv run eduagent
    ```
+   Run it from the project folder: `.env` and `data/` are found relative to the folder you start from.
 
 If Ollama isn't running, or a model or the key is missing, the app still starts and shows a banner at the top of the chat page telling you what to fix.
 
@@ -29,16 +30,20 @@ If Ollama isn't running, or a model or the key is missing, the app still starts 
 - A trace of every step behind each reply, and one-click "Ask instead" buttons to resend a question to another agent.
 - Rotating log file in `data/logs/`.
 
-The Notes, Progress, Analytics and course-material pages are placeholders for now.
+- Side pages: Library, Notes, Flashcards, Progress and How it works. They are placeholders for now, each saying "Coming in Plan N". There is no Analytics page.
+- Traces are recorded for every reply, but there is no screen to view them until Plan 7.
 
 ## Roadmap
 
 | Plan | What it adds |
 |---|---|
-| 1. Foundation | Chat shell, routing, tracing, logging, one-command start (done) |
-| 2. Course material | Upload files, search them, answers grounded in your material |
-| 3. Notes and coding | Notes maker and coding helper working on your material |
-| 4. Progress | Quizzes, mastery tracking, analytics, semantic answer cache |
+| 1. Foundation | Chat shell, model routing, tracing, logging, one-command start (done) |
+| 2. Knowledge base & ingestion | Upload and parse course material, search it, Library page |
+| 3. Notes maker | Generated notes and flashcards from your material, Notes page, PDF export |
+| 4. Tutor | Grounded answers with citations, doubt logging, flashcard review, quizzes |
+| 5. Analytics | Mastery tracking and the Progress page with charts |
+| 6. Coding agent | Explain and review your code, with course-material search |
+| 7. How it works page | Interactive map of the system, live path, replay and demo mode |
 
 ## Your data
 
@@ -48,7 +53,7 @@ Your data stays in `data/` and is never committed: the database, uploads, notes 
 
 ```
 uv run pytest -q              # fast tests
-uv run pytest -m ollama -q    # also runs the tests that need Ollama
+uv run pytest -m ollama -q    # runs ONLY the tests that need Ollama
 ```
 
 ## Licence
