@@ -131,3 +131,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `PlaceholderAgent` replies "<Name> isn't built yet — coming in Plan N." with no model call.
 *Rejected:* Stub agents that call the model with a guess at their job.
 *Why:* Routing and the agent tree work end to end now, and nothing pretends to be finished.
+
+## 2026-11-09 — ADK session store in a separate sessions.db
+*Chose:* ADK `DatabaseSessionService` in `sessions.db`, which ADK owns and migrates; our `threads` table holds only titles and the last agent.
+*Rejected:* Our own messages table in `study.db`.
+*Why:* ADK needs its own event format to replay a conversation. Copying it into our schema would mean maintaining two versions of the same history.
+
+## 2026-11-09 — Thread id is the ADK session id
+*Chose:* One id for both: creating a thread creates the session with the same id.
+*Rejected:* A separate id with a mapping table.
+*Why:* Reopening a saved chat is a single lookup, and the two can never point at different conversations.
