@@ -9,6 +9,7 @@ from eduagent.tracing import current_trace_id
 ENV_VARS = [
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_DAILY_LIMIT", "QWEN_MODEL",
     "EMBED_MODEL", "OLLAMA_URL", "ROUTING_MODE", "DATA_DIR", "LOG_LEVEL",
+    "OLLAMA_USE_GPU",
 ]
 
 

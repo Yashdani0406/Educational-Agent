@@ -321,3 +321,15 @@ def test_build_routed_llm_qwen_cpu_option(tmp_path, use_gpu, expected):
     llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
     extra = {k: v for k, v in llm.qwen._additional_args.items() if k == "num_gpu"}
     assert extra == expected
+
+
+def test_gemini_key_never_appears_in_reprs(tmp_path):
+    from eduagent.agents.tutor import build_tutor
+    from eduagent.models.routed_llm import build_routed_llm
+
+    env = Env(tmp_path)
+    key = "AIzaFAKEKEY123"
+    settings = Settings(_env_file=None, gemini_api_key=SecretStr(key), data_dir=tmp_path)
+    llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
+    for obj in (llm, llm.gemini, build_tutor(llm)):
+        assert key not in repr(obj)
