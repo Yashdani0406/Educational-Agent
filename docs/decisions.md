@@ -161,3 +161,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Small "Ask instead:" buttons under each reply that resend the same question to another agent.
 *Rejected:* Making the student retype the question with an `@mention`.
 *Why:* A misroute then costs one click, and each click is recorded as a reroute step, so it becomes eval data for the router.
+
+## 2026-11-09 — Preflight warns instead of failing
+*Chose:* Check Ollama, both models and the Gemini key at start-up, log each problem and show it as a banner, but always start the app.
+*Rejected:* Refusing to start when something is missing.
+*Why:* Most problems are fixable while the app is open, and Gemini-only or Qwen-only use is valid. The banner names the exact command to run.
+
+## 2026-11-09 — Localhost-only binding
+*Chose:* Serve the UI on `127.0.0.1:8000` only.
+*Rejected:* Binding to `0.0.0.0` so other devices can connect.
+*Why:* The app has no login and holds personal course material, so it should not be reachable from the network.
