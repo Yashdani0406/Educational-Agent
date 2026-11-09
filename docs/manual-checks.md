@@ -12,7 +12,11 @@ uv run pytest -m ollama tests/agents -q -s
 
 The test prints every miss and fails below 90% accuracy.
 
-**Latest run (2026-11-08, `qwen3:4b-instruct`): 29/30.**
+**Latest run (2026-11-09, `qwen3:4b-instruct`, temperature 0, 45 cases): 41/45.**
+Misses: "draw a mermaid flowchart of train/test split (with validation)" with last agent none, tutor, coding and notes_maker
+was routed to coding, expected tutor (the phrase is also the sklearn function name). All other cases pass.
+
+Previous run (2026-11-08, `qwen3:4b-instruct`): 29/30.**
 Miss: "why is my accuracy 100% on training but 60% on test" (no previous agent) was routed to
 coding, expected tutor. Row 1 of the set was changed from "what is overfitting?" to
 "what is regularization?" because the original is also an example in the prompt.
@@ -23,6 +27,7 @@ Add every real misroute here **and** to `tests/agents/routing_cases.py`.
 
 | Message | Last agent | Routed to | Should be | Date |
 |---|---|---|---|---|
+| draw a mermaid flowchart of train/test split (with validation) | tutor / coding / notes_maker | coding / notes_maker | tutor | 2026-11-09 |
 
 ## End-to-end check (Plan 1)
 

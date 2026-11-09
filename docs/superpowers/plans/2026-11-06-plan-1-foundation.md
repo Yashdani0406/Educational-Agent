@@ -341,6 +341,7 @@ Routing table for `choose` (`mode` = `settings.effective_routing_mode`):
 **Files:** Create `agents/__init__.py`, `agents/routing.py`, `agents/placeholder.py`, `agents/tutor.py`, `agents/coordinator.py`, `agents/registry.py`, `tests/agents/test_routing.py`, `tests/agents/test_coordinator.py`, `tests/agents/routing_cases.py`, `tests/agents/test_routing_eval.py`; create `docs/manual-checks.md`.
 
 > **Amended 2026-11-08 (student-approved):** routing mistakes are handled in layers — deterministic rules first, a few-shot classifier prompt measured on a 30-message eval set (basic prompt 24/30; few-shot with the previous agent in the user message 30/30 twice, ~1 s each on `qwen3:4b-instruct`), "if unsure → tutor", the raw classifier label recorded in the `route` step, and an `ollama`-marked eval test with a ≥ 90% bar that grows with every real misroute. Rulings R6/R7 are folded into the interfaces below.
+> **Amended 2026-11-09 (student-approved):** ROUTER_PROMPT gains a "decide by goal, not format" rule, four diagram examples (one per agent) and a two-line Goal/Agent reply; routing runs at temperature 0; ROUTING_CASES grows to 45 with diagram requests for every agent and the first real misroute. The code in agents/routing.py is the source of truth for the prompt.
 
 **Interfaces — Consumes:** `Settings`, `qwen_complete`, `strip_think`, `Tracer`, `ModelRouter`, `QuotaTracker`, `build_routed_llm`. **Produces:**
 ```python

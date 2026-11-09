@@ -186,3 +186,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Tell the tutor to quote every node label, and also quote labels containing brackets before display.
 *Rejected:* Prompt-only (small models still slip) or showing the raw diagram code on a syntax error.
 *Why:* An unquoted label with parentheses is a Mermaid syntax error; a small deterministic fix guarantees the diagram draws.
+
+## 2026-11-09 — Router decides by goal, not output format
+*Chose:* A goal-not-format rule, one diagram example per agent, and a Goal line before the label.
+*Rejected:* Making diagrams tutor-only (notes and analytics draw diagrams too); embedding-only routing (18/30 on our eval, can't use the previous agent); forced-JSON labels (shape, not correctness).
+*Why:* Measured 30/30 + 11/14 held-out vs 29/30 + 10/14, and the Goal line makes each misroute explain itself in the trace.
+
+## 2026-11-09 — Routing at temperature 0
+*Chose:* The classifier call sends temperature 0.
+*Rejected:* The model's default temperature.
+*Why:* Routing must be deterministic: same message, same agent (the default split one message tutor 3 / coding 2).
