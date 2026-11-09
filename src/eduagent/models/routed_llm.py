@@ -39,6 +39,30 @@ def is_rate_limit(exc: BaseException) -> bool:
     return "RESOURCE_EXHAUSTED" in str(exc)
 
 
+def _quota_ids(details: Any) -> list[str]:
+    """quotaId of every google.rpc.QuotaFailure violation in a Gemini error body."""
+    error = details.get("error") if isinstance(details, dict) else None
+    entries = error.get("details") if isinstance(error, dict) else None
+    ids: list[str] = []
+    for entry in entries if isinstance(entries, list) else []:
+        violations = entry.get("violations") if isinstance(entry, dict) else None
+        for v in violations if isinstance(violations, list) else []:
+            if isinstance(v, dict) and isinstance(v.get("quotaId"), str):
+                ids.append(v["quotaId"])
+    return ids
+
+
+def is_daily_quota_exhausted(exc: BaseException) -> bool:
+    """A rate limit that names a per-day quota (per-minute 429s clear on their own)."""
+    if not is_rate_limit(exc):
+        return False
+    if isinstance(exc, ClientError):
+        ids = _quota_ids(exc.details)
+        if ids:
+            return any("PerDay" in i for i in ids)
+    return "PerDay" in str(exc)
+
+
 def _strip_qwen_think(responses: list[LlmResponse]) -> None:
     """Remove leaked <think> text from Qwen replies (in place)."""
     for r in responses:
@@ -160,7 +184,7 @@ class RoutedLlm(BaseLlm):
             try:
                 responses = await self._call(self.gemini, choice.model_id, llm_request, stream)
             except Exception as e:
-                if is_rate_limit(e):
+                if is_daily_quota_exhausted(e):
                     self.quota.mark_exhausted()
                 message = str(e)[:ERROR_MESSAGE_CAP]
                 log.warning(

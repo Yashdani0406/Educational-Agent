@@ -17,6 +17,7 @@ from eduagent.models.router import ModelRouter
 from eduagent.models.routed_llm import (
     TRACE_FIELD_CAP,
     RoutedLlm,
+    is_daily_quota_exhausted,
     is_rate_limit,
     summarize_request,
 )
@@ -50,6 +51,20 @@ class FakeLlm(BaseLlm):
 
 def rate_limit_error():
     return ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})
+
+
+def quota_error(quota_id):
+    return ClientError(429, {"error": {
+        "code": 429, "message": "quota", "status": "RESOURCE_EXHAUSTED",
+        "details": [{
+            "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+            "violations": [{"quotaId": quota_id}],
+        }],
+    }})
+
+
+PER_DAY = "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+PER_MINUTE = "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
 
 
 class Env:
@@ -107,7 +122,7 @@ async def test_gemini_success_counts_quota(tmp_path, caplog):
 
 
 async def test_rate_limit_falls_back_and_exhausts(tmp_path, caplog):
-    env = Env(tmp_path, gemini=FakeLlm(model="gem", error=rate_limit_error()))
+    env = Env(tmp_path, gemini=FakeLlm(model="gem", error=quota_error(PER_DAY)))
     with caplog.at_level(logging.INFO):
         out = await run(env)
     assert text_of(out) == "from qwen"
@@ -122,6 +137,28 @@ async def test_rate_limit_falls_back_and_exhausts(tmp_path, caplog):
         and r.getMessage().endswith("), falling back to qwen")
         for r in caplog.records
     )
+
+
+@pytest.mark.parametrize("error", [quota_error(PER_MINUTE), rate_limit_error()])
+async def test_per_minute_429_falls_back_without_exhausting(tmp_path, error):
+    env = Env(tmp_path, gemini=FakeLlm(model="gem", error=error))
+    out = await run(env)
+    assert text_of(out) == "from qwen"
+    assert env.quota.is_available() is True
+
+
+def test_is_daily_quota_exhausted():
+    assert is_daily_quota_exhausted(quota_error(PER_DAY))
+    assert not is_daily_quota_exhausted(quota_error(PER_MINUTE))
+    assert not is_daily_quota_exhausted(rate_limit_error())
+    assert not is_daily_quota_exhausted(ConnectionError("down"))
+    assert is_daily_quota_exhausted(
+        ClientError(429, {"error": {"message": "exceeded GenerateRequestsPerDay quota"}})
+    )
+    assert is_daily_quota_exhausted(
+        litellm.RateLimitError("GenerateRequestsPerDayPerProjectPerModel", "gemini", "m")
+    )
+    assert not is_daily_quota_exhausted(litellm.RateLimitError("slow down", "ollama", "qw"))
 
 
 async def test_non_rate_limit_error_falls_back_without_exhausting(tmp_path):

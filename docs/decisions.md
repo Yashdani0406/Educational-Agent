@@ -196,3 +196,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* The classifier call sends temperature 0.
 *Rejected:* The model's default temperature.
 *Why:* Routing must be deterministic: same message, same agent (the default split one message tutor 3 / coding 2).
+
+## 2026-11-09 — Only a per-day 429 marks the Gemini day exhausted
+*Chose:* Mark the day exhausted only when the 429 names a per-day quota (a quotaId containing `PerDay`); any other 429 just falls back to Qwen for that request.
+*Rejected:* Any 429 marks the day exhausted.
+*Why:* The free tier also returns 429 for per-minute limits; one burst would have switched Gemini off until midnight Pacific with no way to recover.
