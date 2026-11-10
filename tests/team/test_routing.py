@@ -130,11 +130,20 @@ def test_mention_only_leading(text):
     assert parse_mention(text)[0] is not None
 
 
-async def test_classifier_timeout_routes_default():
+async def test_classifier_timeout_routes_default(monkeypatch):
+    import asyncio
+
+    import litellm
+
+    from eduagent.config import Settings
     from eduagent.models.qwen import QwenTimeout
+    from eduagent.team.routing import make_qwen_classifier
 
-    async def slow(text, last_agent):
-        raise QwenTimeout("Qwen took longer than 240 s")
+    async def slow(**kwargs):
+        await asyncio.sleep(1)
 
-    d = await route("hm", None, slow)
-    assert d == RouteDecision("tutor", "default")
+    monkeypatch.setattr(litellm, "acompletion", slow)
+    classify = make_qwen_classifier(Settings(_env_file=None, qwen_timeout_s=0.05))
+    with pytest.raises(QwenTimeout):  # the real classifier really times out
+        await classify("hm", None)
+    assert await route("hm", None, classify) == RouteDecision("tutor", "default")
