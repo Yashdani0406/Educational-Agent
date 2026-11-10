@@ -221,3 +221,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Network errors (including an invalid URL) keep "Ollama isn't running. Start it with: ollama serve"; a bad or non-Ollama answer (ValueError, KeyError, TypeError) says "Ollama answered with something unexpected (check OLLAMA_URL in .env)."
 *Rejected:* One "isn't running" message for everything, or letting the exception crash start-up.
 *Why:* Telling the student to start a server that is already running (a wrong OLLAMA_URL) sends them the wrong way.
+
+## 2026-11-10 — One num_ctx (8192) for every Qwen call
+*Chose:* `ollama_options` always sends `num_ctx` from `QWEN_NUM_CTX` (default 8192), and the classifier, the ADK Qwen model and later tagging calls all use it.
+*Rejected:* Leaving Ollama's default, or a different context per call type.
+*Why:* A different `num_ctx` makes Ollama reload the model, and its 4096 default silently cuts long prompts (course text plus history). Live check: `ollama ps` shows CONTEXT 8192 after both the classifier and the tutor call, same model, no reload.
+
+## 2026-11-10 — Qwen answers must arrive within 240 s
+*Chose:* `QWEN_TIMEOUT_S=240` wraps every Qwen call (`qwen_complete`, and the direct and fallback calls in `RoutedLlm`) and raises `QwenTimeout`; the router falls back to the default agent, chat shows "Something went wrong".
+*Rejected:* No timeout (a stuck Ollama hangs the chat forever), or a tight one like 30 s.
+*Why:* Measured on CPU: cold load 30 s for a short classifier call, warm classifier 4 s, a two-sentence tutor answer 7 s. Long tutor answers with course context are much slower than these, so 240 s is about 8x the cold start; it only trips on a real hang. Gemini keeps its own 30 s limit.

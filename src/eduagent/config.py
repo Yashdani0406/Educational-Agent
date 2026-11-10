@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 WHAT_IT_DOES = (
@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_use_gpu: bool = False
+    qwen_timeout_s: float = Field(default=240.0, gt=0)
+    qwen_num_ctx: int = Field(default=8192, ge=2048)
     routing_mode: RoutingMode = "split"
     data_dir: Path = Path("data")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

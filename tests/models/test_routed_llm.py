@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -13,6 +14,7 @@ from pydantic import SecretStr
 from eduagent.config import Settings
 from eduagent.db.database import Database
 from eduagent.models.quota import QuotaTracker
+from eduagent.models.qwen import QwenTimeout
 from eduagent.models.router import ModelRouter
 from eduagent.models.routed_llm import (
     TRACE_FIELD_CAP,
@@ -82,6 +84,7 @@ class Env:
         self.llm = RoutedLlm(
             model="routed", job="chat", router=ModelRouter(settings, self.quota),
             quota=self.quota, tracer=self.tracer, gemini=self.gemini, qwen=self.qwen,
+            qwen_timeout_s=settings.qwen_timeout_s,
         )
         self.trace_id = self.tracer.start_trace("chat", "t")
 
@@ -358,3 +361,27 @@ async def test_fallback_does_not_mutate_original_request(tmp_path):
     await run(env, req)
     assert qwen.seen_tools == 1
     assert len(req.config.tools) == 1
+
+
+class SlowQwen(BaseLlm):
+    async def generate_content_async(self, llm_request, stream=False):
+        await asyncio.sleep(1)
+        yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text="late")]))
+
+
+async def test_routed_qwen_call_times_out(tmp_path):
+    env = Env(tmp_path, mode="all_qwen", qwen=SlowQwen(model="ollama_chat/qw"))
+    env.llm.qwen_timeout_s = 0.05
+    with pytest.raises(QwenTimeout, match="Qwen took longer than 0.05 s"):
+        await run(env)
+
+
+async def test_fallback_qwen_call_times_out(tmp_path):
+    env = Env(
+        tmp_path, gemini=FakeLlm(model="gem", error=ConnectionError("down")),
+        qwen=SlowQwen(model="ollama_chat/qw"),
+    )
+    env.llm.qwen_timeout_s = 0.05
+    with pytest.raises(QwenTimeout):
+        await run(env)
+    assert [s.step_type for s in env.steps()] == ["fallback"]

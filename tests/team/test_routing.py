@@ -2,6 +2,7 @@ import pytest
 
 from eduagent.team.routing import (
     ROUTER_PROMPT,
+    RouteDecision,
     classifier_message,
     parse_mention,
     route,
@@ -127,3 +128,13 @@ def test_eval_set_covers_all_agents():
 @pytest.mark.parametrize("text", ["@tutor", "@CODE x"])
 def test_mention_only_leading(text):
     assert parse_mention(text)[0] is not None
+
+
+async def test_classifier_timeout_routes_default():
+    from eduagent.models.qwen import QwenTimeout
+
+    async def slow(text, last_agent):
+        raise QwenTimeout("Qwen took longer than 240 s")
+
+    d = await route("hm", None, slow)
+    assert d == RouteDecision("tutor", "default")

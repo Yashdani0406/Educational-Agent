@@ -8,7 +8,7 @@ from eduagent.config import Settings
 ENV_VARS = [
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_DAILY_LIMIT", "QWEN_MODEL",
     "EMBED_MODEL", "OLLAMA_URL", "ROUTING_MODE", "DATA_DIR", "LOG_LEVEL",
-    "OLLAMA_USE_GPU",
+    "OLLAMA_USE_GPU", "QWEN_TIMEOUT_S", "QWEN_NUM_CTX",
 ]
 
 
@@ -63,3 +63,12 @@ def test_invalid_mode_rejected(monkeypatch):
 def test_key_not_in_repr(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "sk-test")
     assert "sk-test" not in repr(make())
+
+
+@pytest.mark.parametrize(
+    "name, value", [("QWEN_TIMEOUT_S", "0"), ("QWEN_TIMEOUT_S", "-1"), ("QWEN_NUM_CTX", "1024")]
+)
+def test_settings_reject_bad_timeout(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError):
+        make()

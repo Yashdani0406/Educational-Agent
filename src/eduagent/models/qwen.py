@@ -1,5 +1,6 @@
 """Helpers for the local Qwen model served by Ollama."""
 
+import asyncio
 import logging
 import re
 
@@ -18,6 +19,13 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _THINK_OPEN = re.compile(r"<think>.*", re.DOTALL)
 
 
+class QwenTimeout(TimeoutError):
+    """The local Qwen model did not answer within QWEN_TIMEOUT_S."""
+
+    def __init__(self, seconds: float):
+        super().__init__(f"Qwen took longer than {seconds:g} s")
+
+
 def strip_think(text: str) -> str:
     """Remove <think> blocks (including an unclosed one) and trim."""
     text = _THINK_BLOCK.sub("", text)
@@ -27,8 +35,15 @@ def strip_think(text: str) -> str:
 
 
 def ollama_options(settings: Settings) -> dict[str, float]:
-    """Extra litellm kwargs for Ollama; litellm puts unknown ones into Ollama's request `options`."""
-    return {} if settings.ollama_use_gpu else {"num_gpu": 0}
+    """Extra litellm kwargs for Ollama; litellm puts unknown ones into Ollama's request `options`.
+
+    num_ctx is the same on every Qwen call: a different value makes Ollama reload the model,
+    and Ollama's own default (4096) silently cuts long prompts.
+    """
+    options: dict[str, float] = {"num_ctx": settings.qwen_num_ctx}
+    if not settings.ollama_use_gpu:
+        options["num_gpu"] = 0
+    return options
 
 
 async def qwen_complete(
@@ -45,10 +60,16 @@ async def qwen_complete(
     if system:
         messages.insert(0, {"role": "system", "content": system})
     log.debug("qwen_complete prompt=%r", prompt)
-    response = await litellm.acompletion(
-        model=f"ollama_chat/{settings.qwen_model}",
-        messages=messages,
-        api_base=settings.ollama_url,
-        **extra,
-    )
+    try:
+        response = await asyncio.wait_for(
+            litellm.acompletion(
+                model=f"ollama_chat/{settings.qwen_model}",
+                messages=messages,
+                api_base=settings.ollama_url,
+                **extra,
+            ),
+            settings.qwen_timeout_s,
+        )
+    except TimeoutError as exc:
+        raise QwenTimeout(settings.qwen_timeout_s) from exc
     return strip_think(response.choices[0].message.content or "")

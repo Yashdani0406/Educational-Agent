@@ -1,5 +1,6 @@
 """The one place every LLM call passes through: routing, quota, fallback, tracing."""
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncGenerator
@@ -14,7 +15,7 @@ from google.genai.errors import ClientError
 
 from eduagent.config import Settings
 from eduagent.models.quota import QuotaTracker
-from eduagent.models.qwen import ollama_options, strip_think
+from eduagent.models.qwen import QwenTimeout, ollama_options, strip_think
 from eduagent.models.router import JobKind, ModelRouter
 from eduagent.tracing.tracer import Tracer, current_trace_id
 
@@ -147,6 +148,7 @@ class RoutedLlm(BaseLlm):
     tracer: Tracer
     gemini: BaseLlm
     qwen: BaseLlm
+    qwen_timeout_s: float
 
     async def _call(
         self, llm: BaseLlm, label: str, llm_request: LlmRequest, stream: bool
@@ -156,7 +158,20 @@ class RoutedLlm(BaseLlm):
         # prefers llm_request.model over its own. `label` is only for logs and the trace.
         request = llm_request.model_copy(update={"model": llm.model}, deep=True)
         started = time.perf_counter()
-        responses = [r async for r in llm.generate_content_async(request, stream=stream)]
+
+        async def collect() -> list[LlmResponse]:
+            return [r async for r in llm.generate_content_async(request, stream=stream)]
+
+        if llm is self.qwen:
+            try:
+                async with asyncio.timeout(self.qwen_timeout_s) as deadline:
+                    responses = await collect()
+            except TimeoutError as exc:
+                if not deadline.expired():
+                    raise
+                raise QwenTimeout(self.qwen_timeout_s) from exc
+        else:
+            responses = await collect()
         ms = int((time.perf_counter() - started) * 1000)
         if llm is self.qwen:
             _strip_qwen_think(responses)
@@ -225,5 +240,5 @@ def build_routed_llm(
     )
     return RoutedLlm(
         model=f"routed/{job}", job=job, router=router, quota=quota, tracer=tracer,
-        gemini=gemini, qwen=qwen,
+        gemini=gemini, qwen=qwen, qwen_timeout_s=settings.qwen_timeout_s,
     )

@@ -60,3 +60,24 @@ async def test_qwen_complete_live():
     text = await qwen_complete("Say hello in one word.", Settings(_env_file=None))
     assert text
     assert "<think>" not in text
+
+
+def test_ollama_options_include_num_ctx():
+    from eduagent.models.qwen import ollama_options
+
+    assert ollama_options(Settings(_env_file=None)) == {"num_ctx": 8192, "num_gpu": 0}
+    assert ollama_options(Settings(_env_file=None, ollama_use_gpu=True)) == {"num_ctx": 8192}
+
+
+async def test_qwen_complete_times_out(monkeypatch):
+    import asyncio
+
+    from eduagent.models.qwen import QwenTimeout
+
+    async def slow(**kwargs):
+        await asyncio.sleep(1)
+        return _Reply()
+
+    monkeypatch.setattr(litellm, "acompletion", slow)
+    with pytest.raises(QwenTimeout, match="Qwen took longer than 0.05 s"):
+        await qwen_complete("hello", Settings(_env_file=None, qwen_timeout_s=0.05))
