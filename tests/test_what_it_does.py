@@ -4,7 +4,7 @@ import pytest
 
 MODULES = [
     "config", "logging_setup", "launcher", "services",
-    "db.database", "db.courses", "db.threads",
+    "db.database", "db.courses", "db.threads", "db.files",
     "tracing.redact", "tracing.tracer",
     "models.quota", "models.qwen", "models.router", "models.routed_llm",
     "team.coordinator", "team.placeholder", "team.registry", "team.routing", "team.tutor",

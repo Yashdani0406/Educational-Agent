@@ -231,3 +231,23 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `QWEN_TIMEOUT_S=240` wraps every Qwen call (`qwen_complete`, and the direct and fallback calls in `RoutedLlm`) and raises `QwenTimeout`; the router falls back to the default agent, chat shows "Something went wrong".
 *Rejected:* No timeout (a stuck Ollama hangs the chat forever), or a tight one like 30 s.
 *Why:* Measured on CPU: cold load 30 s for a short classifier call, warm classifier 4 s, a two-sentence tutor answer 7 s. Long tutor answers with course context are much slower than these, so 240 s is about 8x the cold start; it only trips on a real hang. Gemini keeps its own 30 s limit.
+
+## 2026-11-10 — One `files` row per file is also its ingestion job
+*Chose:* The `files` table holds the file and its job: `queue_pos` (unique) for order, `status`, `error`, and `pieces_done` with a `file_pieces` row per 25-page piece for checkpoints.
+*Rejected:* A separate jobs table beside the files table.
+*Why:* Queue order, progress and the Library list all read one row, so they cannot disagree, and a restart resumes with one query.
+
+## 2026-11-10 — `week1_monday` is stored once on the course
+*Chose:* `courses.week1_monday` is set by the course's first upload and never changed; `uploaded_week = (upload Monday - week1_monday) // 7 + 1`.
+*Rejected:* Deriving week 1 from the earliest file still present.
+*Why:* Deleting the first file would otherwise renumber the week label of every later file.
+
+## 2026-11-10 — Duplicate content is refused by the database
+*Chose:* `UNIQUE(course_id, content_hash)` on `files`; `add` raises `sqlite3.IntegrityError` for a repeat in the same course. NULL hashes (a web link before its snapshot) never collide.
+*Rejected:* Checking `find_by_hash` first and trusting the check.
+*Why:* Two uploads racing past a check would both insert; the constraint decides atomically. The same file in another course is allowed.
+
+## 2026-11-10 — The week label uses the local calendar date
+*Chose:* `week1_monday` and `uploaded_week` come from `clock().astimezone().date()`; `uploaded_at` stays ISO-8601 UTC text.
+*Rejected:* The UTC date.
+*Why:* A student uploading at 11 pm on a Sunday would otherwise get next week's label. Tests use 12:00 UTC clocks so they pass in any time zone.

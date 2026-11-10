@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     qwen_num_ctx: int = Field(default=8192, ge=2048)
     routing_mode: RoutingMode = "split"
     data_dir: Path = Path("data")
+    chroma_port: int = Field(default=8001, ge=1, le=65535)
+    hybrid_alpha: float = Field(default=0.6, ge=0, le=1)
+    rerank_enabled: bool = True
+    search_results: int = Field(default=10, ge=1)
+    search_results_qwen: int = Field(default=6, ge=1)
+    search_module_share: float = Field(default=0.7, ge=0, le=1)
+    formula_enrichment: bool = True
+    ingest_threads: int = Field(default=4, ge=1)
+    models_dir: Path = Path("data/models")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     @property
@@ -40,6 +49,14 @@ class Settings(BaseSettings):
         if key is None or not key.get_secret_value().strip():
             return "all_qwen"
         return self.routing_mode
+
+    @property
+    def sources_dir(self) -> Path:
+        return self.data_dir / "sources"
+
+    @property
+    def chroma_dir(self) -> Path:
+        return self.data_dir / "chroma"
 
     @property
     def db_path(self) -> Path:
