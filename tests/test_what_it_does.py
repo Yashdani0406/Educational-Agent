@@ -7,7 +7,7 @@ MODULES = [
     "db.database", "db.courses", "db.threads",
     "tracing.redact", "tracing.tracer",
     "models.quota", "models.qwen", "models.router", "models.routed_llm",
-    "agents.coordinator", "agents.placeholder", "agents.registry", "agents.routing", "agents.tutor",
+    "team.coordinator", "team.placeholder", "team.registry", "team.routing", "team.tutor",
     "chat.service",
     "ui.app", "ui.frame", "ui.mermaid", "ui.theme", "ui.pages.chat", "ui.pages.placeholders",
 ]

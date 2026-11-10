@@ -3,7 +3,7 @@
 from fastapi.responses import RedirectResponse
 from nicegui import ui
 
-from eduagent.agents.routing import AGENT_NAMES, DISPLAY_NAMES, MENTIONS
+from eduagent.team.routing import AGENT_NAMES, DISPLAY_NAMES, MENTIONS
 from eduagent.chat.service import AgentReply
 from eduagent.services import Services
 from eduagent.ui.frame import UiState, page_frame

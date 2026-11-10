@@ -1,4 +1,4 @@
-from eduagent.agents.tutor import TUTOR_INSTRUCTION
+from eduagent.team.tutor import TUTOR_INSTRUCTION
 
 
 def test_instruction_tells_model_to_quote_mermaid_labels():

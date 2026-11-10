@@ -8,7 +8,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService
 from google.genai import types
 
-from eduagent.agents.routing import DISPLAY_NAMES, MENTIONS, AgentName
+from eduagent.team.routing import DISPLAY_NAMES, MENTIONS, AgentName
 from eduagent.db.threads import Thread, ThreadsRepo
 from eduagent.tracing.tracer import Tracer, current_trace_id
 

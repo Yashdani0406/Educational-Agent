@@ -1,6 +1,6 @@
 """Routing eval set: (message, last_agent, expected). Grows with every real misroute."""
 
-from eduagent.agents.routing import AgentName
+from eduagent.team.routing import AgentName
 
 ROUTING_CASES: list[tuple[str, AgentName | None, AgentName]] = [
     ("what is regularization?", None, "tutor"),

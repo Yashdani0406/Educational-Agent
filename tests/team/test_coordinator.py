@@ -2,9 +2,9 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from eduagent.agents.coordinator import CoordinatorAgent
-from eduagent.agents.placeholder import PlaceholderAgent
-from eduagent.agents.routing import DISPLAY_NAMES
+from eduagent.team.coordinator import CoordinatorAgent
+from eduagent.team.placeholder import PlaceholderAgent
+from eduagent.team.routing import DISPLAY_NAMES
 from eduagent.db.database import Database
 from eduagent.tracing.tracer import Tracer, current_trace_id
 

@@ -324,7 +324,7 @@ def test_build_routed_llm_qwen_cpu_option(tmp_path, use_gpu, expected):
 
 
 def test_gemini_key_never_appears_in_reprs(tmp_path):
-    from eduagent.agents.tutor import build_tutor
+    from eduagent.team.tutor import build_tutor
     from eduagent.models.routed_llm import build_routed_llm
 
     env = Env(tmp_path)

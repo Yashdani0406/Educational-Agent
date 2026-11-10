@@ -1,7 +1,7 @@
 import pytest
 from routing_cases import ROUTING_CASES
 
-from eduagent.agents.routing import make_qwen_classifier, route
+from eduagent.team.routing import make_qwen_classifier, route
 from eduagent.config import Settings
 
 pytestmark = pytest.mark.ollama

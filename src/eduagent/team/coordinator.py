@@ -7,7 +7,7 @@ from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event, EventActions
 
-from eduagent.agents.routing import Classifier, route
+from eduagent.team.routing import Classifier, route
 from eduagent.tracing.tracer import Tracer, current_trace_id
 
 log = logging.getLogger(__name__)

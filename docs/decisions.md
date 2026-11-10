@@ -206,3 +206,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Keep the decisions for Plan 2 (parsers, web links, chunking, search, books) in docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md, and mark each change to the parent spec "Changed 2026-11-10".
 *Rejected:* Copying every decision into this log.
 *Why:* The design records each choice with its research and rejected options; this log points to it so there is one source.
+
+## 2026-11-10 — Rename the agents package to team; APP_NAME stays "eduagent"
+*Chose:* Rename `eduagent.agents` to `eduagent.team` so ADK's Runner no longer infers the app name "agents" from the folder; keep `APP_NAME = "eduagent"`.
+*Rejected:* Filtering the "App name mismatch" log line, or changing `APP_NAME` to "agents".
+*Why:* A log filter hides the symptom, the folder name is the cause. ADK sessions are keyed by `APP_NAME`, so changing it would orphan saved chats.

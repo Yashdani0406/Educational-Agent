@@ -10,7 +10,7 @@ from nicegui.testing.general import nicegui_reset_globals, prepare_simulation
 from nicegui.testing.general_fixtures import pytest_configure  # noqa: F401
 from nicegui.testing.user import User
 
-from eduagent.agents.routing import DISPLAY_NAMES
+from eduagent.team.routing import DISPLAY_NAMES
 from eduagent.chat.service import AgentReply
 from eduagent.config import Settings
 from eduagent.db.courses import CoursesRepo

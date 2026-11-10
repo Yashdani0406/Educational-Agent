@@ -1,6 +1,6 @@
 import pytest
 
-from eduagent.agents.routing import (
+from eduagent.team.routing import (
     ROUTER_PROMPT,
     classifier_message,
     parse_mention,
@@ -92,7 +92,7 @@ async def test_raw_label_keeps_goal():
 async def test_classifier_sends_temperature_zero(monkeypatch):
     import litellm
 
-    from eduagent.agents.routing import make_qwen_classifier
+    from eduagent.team.routing import make_qwen_classifier
     from eduagent.config import Settings
 
     seen = {}

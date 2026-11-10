@@ -1,7 +1,7 @@
 from google.adk.agents import LlmAgent
 from pydantic import SecretStr
 
-from eduagent.agents.registry import build_coordinator
+from eduagent.team.registry import build_coordinator
 from eduagent.config import Settings
 from eduagent.db.database import Database
 from eduagent.models.quota import QuotaTracker

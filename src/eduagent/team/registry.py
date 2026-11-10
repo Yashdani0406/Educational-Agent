@@ -1,9 +1,9 @@
 """Wires the four agents and the coordinator together."""
 
-from eduagent.agents.coordinator import CoordinatorAgent
-from eduagent.agents.placeholder import PlaceholderAgent
-from eduagent.agents.routing import DISPLAY_NAMES, AgentName, Classifier, make_qwen_classifier
-from eduagent.agents.tutor import build_tutor
+from eduagent.team.coordinator import CoordinatorAgent
+from eduagent.team.placeholder import PlaceholderAgent
+from eduagent.team.routing import DISPLAY_NAMES, AgentName, Classifier, make_qwen_classifier
+from eduagent.team.tutor import build_tutor
 from eduagent.config import Settings
 from eduagent.models.quota import QuotaTracker
 from eduagent.models.routed_llm import build_routed_llm

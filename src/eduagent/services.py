@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 
-from eduagent.agents.registry import build_coordinator
+from eduagent.team.registry import build_coordinator
 from eduagent.chat.service import ChatService
 from eduagent.config import Settings
 from eduagent.db.courses import CoursesRepo

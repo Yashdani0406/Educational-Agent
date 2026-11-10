@@ -7,7 +7,7 @@ when there is no `@mention` and no code. To measure it, make sure Ollama is runn
 `qwen3:4b-instruct` pulled, then run:
 
 ```
-uv run pytest -m ollama tests/agents -q -s
+uv run pytest -m ollama tests/team -q -s
 ```
 
 The test prints every miss and fails below 90% accuracy.
@@ -25,7 +25,7 @@ coding, expected tutor. Row 1 of the set was changed from "what is overfitting?"
 
 ### Misroutes found in real use
 
-Add every real misroute here **and** to `tests/agents/routing_cases.py`.
+Add every real misroute here **and** to `tests/team/routing_cases.py`.
 
 | Message | Last agent | Routed to | Should be | Date |
 |---|---|---|---|---|
@@ -45,7 +45,7 @@ Run on 2026-11-09 by the student at the browser, with the assistant checking the
 | 4 | `@progress hi` shows the Analytics placeholder | Pass |
 | 5 | Set `ROUTING_MODE=all_qwen`, restart: caption shows Qwen and the top bar says all Qwen | Pass |
 | 6 | Stop Ollama, restart: banner names `ollama serve` | Pass (Ollama made unreachable with `OLLAMA_URL=http://127.0.0.1:9`; banner shown and dismissible) |
-| 7 | Routing eval (`uv run pytest -m ollama tests/agents -q -s`): score recorded in the Routing section above | Pass: 41/45 |
+| 7 | Routing eval (`uv run pytest -m ollama tests/team -q -s`): score recorded in the Routing section above | Pass: 41/45 |
 | 8 | Click "Ask instead: Coding" under a Tutor reply: the trace has a `reroute` step | Pass |
 | 9 | `SELECT count(*) FROM trace_steps WHERE input_json LIKE '%<first 8 chars of key>%'` on `data/study.db` returns 0 | Pass: 0 of 41 steps (inputs and outputs) |
 | 10 | `data/logs/eduagent.log` does not contain the key | Pass: 0 |
