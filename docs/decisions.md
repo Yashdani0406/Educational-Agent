@@ -201,3 +201,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Mark the day exhausted only when the 429 names a per-day quota (a quotaId containing `PerDay`); any other 429 just falls back to Qwen for that request.
 *Rejected:* Any 429 marks the day exhausted.
 *Why:* The free tier also returns 429 for per-minute limits; one burst would have switched Gemini off until midnight Pacific with no way to recover.
+
+## 2026-11-10 — Plan 2 decisions live in the Plan 2 design
+*Chose:* Keep the decisions for Plan 2 (parsers, web links, chunking, search, books) in docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md, and mark each change to the parent spec "Changed 2026-11-10".
+*Rejected:* Copying every decision into this log.
+*Why:* The design records each choice with its research and rejected options; this log points to it so there is one source.

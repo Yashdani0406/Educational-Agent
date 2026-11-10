@@ -36,7 +36,7 @@ A personal study companion for a Master's student in Data Science. The student u
 - Automatic note, flashcard, or quiz generation on upload. These are created only when asked.
 - A JavaScript or React frontend.
 - Paid APIs.
-- OCR of scanned or image-only PDFs. **(my call)** They fail with a clear message.
+- OCR of scanned or image-only PDFs. **(my call)** They fail with a clear message. **Changed 2026-11-10:** still a non-goal for whole scanned documents, photos and handwriting, but picture areas inside PDF pages are OCR'd so that image tables in books are read (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 - A mobile app. PDF export covers reading away from the app.
 
 **Anti-goals** (failures even if the app "works")
@@ -92,14 +92,14 @@ data/
 └── study.db    SQLite
 ```
 
-- **ChromaDB (vector store):** holds chunks of source material, generated notes, flashcards, and quiz practice pages. Every chunk carries metadata: `course`, `module`, `topic(s)`, `source_file`, location (`page` / `slide` / `line range`), `kind` (`source` | `detailed_note` | `summary_note` | `flashcard` | `quiz_practice` | `web`), `uploaded_week`.
+- **ChromaDB (vector store):** holds chunks of source material, generated notes, flashcards, and quiz practice pages. Every chunk carries metadata: `course`, `module`, `topic(s)`, `source_file`, location (`page` / `slide` / `line range`), `kind` (`source` | `detailed_note` | `summary_note` | `flashcard` | `quiz_practice` | `web`), `uploaded_week`. **Changed 2026-11-10:** metadata also has `origin` (`module` | `reference`) (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 - **SQLite:** courses, modules, topics, files, ingestion jobs, notes index, flashcards and their review schedule, quizzes, questions, attempts and answers, logged doubts (questions asked to the tutor, with topic tags), mastery snapshots over time, tutor suggestions shown or dismissed, and Gemini usage counts.
 - **Concurrency (my call):** ChromaDB is not safe for writes from several processes. Run Chroma in its own local server mode (`chroma run --path data/chroma`) and have every component use the HTTP client. **Change from the conversation:** during design I said "only the knowledge-base MCP server touches Chroma." This replaces that so the ingestion worker and the MCP server can both use it safely. SQLite runs in WAL mode and is reached through one shared data-access package.
 
 ### 4.3 Course organisation
 - **Course → Module → Topic.** A course has several modules, and a module has several topics.
 - **Topics are course-level (my call):** a topic that appears in several modules (for example, gradient descent in Module 2 and Module 6) is **one topic record linked to all of them**. It is shown under each module in the course map. Its mastery score covers all appearances. "All chunks for a topic" can be filtered by module when notes are made for one module.
-- Material arrives **week by week, with no syllabus**. One week can contain one or more modules. **Each file belongs to exactly one module**, and a module can have many files.
+- Material arrives **week by week, with no syllabus**. One week can contain one or more modules. **Each file belongs to exactly one module**, and a module can have many files. **Changed 2026-11-10:** this applies to module material only. Books are course references with no module and no topics (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 - The week is kept only as a date label ("uploaded in week 5").
 - **On upload:** the student picks the module for each file, or creates a new one. The app suggests a module by reading the file (for example, "Module 4: Decision Trees" on a title slide). **(my call)**
 - **Topics are detected automatically** within the module (by Qwen). The app matches them against existing topics, so a topic that returns later attaches to the same record. New topics are shown for quick confirmation (accept, rename, or merge) before saving.
@@ -107,8 +107,8 @@ data/
 ### 4.4 Ingestion pipeline
 Triggered by every upload, for any number of files:
 1. Files are queued and processed **in the background**, one after another. The Library page shows per-file status: *queued → reading → chunking → embedding → tagging → done / failed (with reason)*.
-2. **Parse** to Markdown. Supported: PDF (text-based), PPTX, DOCX, TXT/MD transcripts, and web links via the Fetch MCP. Docling (better for tables, heavier) and MarkItDown (lighter) were both suggested; the builder picks or combines them, keeping CPU-only performance in mind.
-3. **Chunk by structure**: per slide, per heading section, or about 500–800 words with overlap, never mid-sentence. Keep the location metadata needed for citations.
+2. **Parse** to Markdown. Supported: PDF (text-based), PPTX, DOCX, TXT/MD transcripts, and web links via the Fetch MCP. Docling (better for tables, heavier) and MarkItDown (lighter) were both suggested; the builder picks or combines them, keeping CPU-only performance in mind. **Changed 2026-11-10:** web links are fetched with httpx and read with trafilatura inside the upload worker (the Fetch MCP is not used). Docling parses PDF, PPTX and DOCX; an own splitter handles TXT, MD and pasted text (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
+3. **Chunk by structure**: per slide, per heading section, or about 500–800 words with overlap, never mid-sentence. Keep the location metadata needed for citations. **Changed 2026-11-10:** chunk sizes sit at the low end of 500–800 words: slides one chunk per slide; books about 450–550 words per split with a hard maximum of 800; text about 400–500 words with about 15% overlap (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 4. **Tag** topics (see 4.3), **embed** with `nomic-embed-text`, and **store** in Chroma. Record the file in SQLite.
 
 **Safety rules** (proposed by the assistant, **agreed by the student**):
@@ -130,7 +130,7 @@ Triggered by every upload, for any number of files:
   - The student types normally, and the **coordinator routes** each message to the right agent. Each reply is **labelled** with the agent's name.
   - `@tutor`, `@notes`, `@code`, `@progress` force a specific agent.
   - **Left sidebar:** course selector; the **course map** (modules → topics, each topic with a strong / okay / weak coloured dot); links to the side pages; **saved chats** (separate threads, for example a doubt session and a code review).
-  - **Side pages:** **Library** (uploads and processing status, module assignment, topic confirmation, delete/replace), **Notes** (browse by module and topic, read, export PDF), **Flashcards** (due count, review), **Progress** (analytics).
+  - **Side pages:** **Library** (uploads and processing status, module assignment, topic confirmation, delete/replace), **Notes** (browse by module and topic, read, export PDF), **Flashcards** (due count, review), **Progress** (analytics). **Changed 2026-11-10:** the Library also takes pasted text (for example lecture transcripts) as an input type, alongside uploads and web links (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
   - **Inside chat:** Markdown, inline **Mermaid** diagrams, code blocks, **source citations** under each answer, quick buttons (*Quiz me on this*, *Explain simpler*), an *Ask another agent* choice under each reply, quizzes answered inline, file attachment for code.
   - **Top bar:** active course, active model, Gemini requests left today.
 - The mockups from the design session are a reference for structure only. "StudyMate" was a placeholder name.
@@ -231,10 +231,11 @@ Triggered by every upload, for any number of files:
 | **Knowledge base** | **Built** (Python MCP SDK / FastMCP) | Notes, Tutor, Coding | Search material, get all chunks for a topic, save notes, flashcards, and practice pages |
 | **Study records** | **Built** (Python MCP SDK / FastMCP) | Tutor, Analytics | Save quiz answers, get weak topics, get due cards, scores over time, log doubts |
 | Filesystem | Existing (read-only, one folder) | Coding | Read multi-file projects |
-| Fetch | Existing | Ingestion | Add a web page to the knowledge base |
+| Fetch | not used; see Plan 2 design | — | Add a web page to the knowledge base |
 | Web search (DuckDuckGo-based, no key) | Existing | Tutor | Fallback when material doesn't cover a question |
 | arXiv search | Existing | Tutor | Related papers |
 
+- **Changed 2026-11-10:** the Fetch row is not used. Web links are ingested by httpx + trafilatura in the upload worker (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 - **Run model:** all on the laptop. ADK's `McpToolset` starts each server as a **child process over stdio** (no ports), starting and stopping with the app.
 - **Tool docstrings and type hints are the agents' tool descriptions** and must be written carefully, especially for Qwen.
 - Each built server must be testable on its own with **MCP Inspector**.
@@ -247,9 +248,10 @@ Browser ⇄ Main Python app (NiceGUI + ADK agents + upload queue + model router)
               ├─ Gemini API (internet)
               ├─ Ollama  :11434  (qwen3:4b-instruct, nomic-embed-text)
               ├─ Chroma server (data/chroma)
-              └─ MCP servers via stdio: knowledge-base, study-records, filesystem, fetch, web search, arXiv
+              └─ MCP servers via stdio: knowledge-base, study-records, filesystem, web search, arXiv
                      └─ data/study.db, data/sources, data/notes
 ```
+**Changed 2026-11-10:** `fetch` is removed from the MCP list above (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 **One command starts everything.**
 
 ### 4.12 Repository and GitHub
@@ -312,7 +314,7 @@ A separate page that visualises every component of the project and how they conn
 ## 5. Install list (for the README)
 - **Ollama** (Windows installer), then `ollama pull qwen3:4b-instruct` and `ollama pull nomic-embed-text`.
 - **uv**, then a Python 3.12 environment.
-- **Python packages:** `google-adk`, `litellm`, `mcp`, `chromadb`, `nicegui`, `playwright` (plus `playwright install chromium`), and the parsing libraries.
+- **Python packages:** `google-adk`, `litellm`, `mcp`, `chromadb`, `nicegui`, `playwright` (plus `playwright install chromium`), and the parsing libraries. **Changed 2026-11-10:** the parsing and search libraries include `docling`, `trafilatura` and `fastembed` (see docs/superpowers/specs/2026-11-10-plan-2-knowledge-base-design.md).
 - **Gemini API key** from Google AI Studio, stored in `.env`.
 - **Node.js** is already installed (for the existing MCP servers).
 
