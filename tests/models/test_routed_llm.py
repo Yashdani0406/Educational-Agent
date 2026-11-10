@@ -333,3 +333,28 @@ def test_gemini_key_never_appears_in_reprs(tmp_path):
     llm = build_routed_llm("light", settings, env.llm.router, env.quota, env.tracer)
     for obj in (llm, llm.gemini, build_tutor(llm)):
         assert key not in repr(obj)
+
+
+class MutatingGemini(BaseLlm):
+    async def generate_content_async(self, llm_request, stream=False):
+        llm_request.config.tools.append(types.Tool())  # in place, like a real model wrapper might
+        raise RuntimeError("boom")
+        yield  # pragma: no cover
+
+
+class RecordingQwen(BaseLlm):
+    seen_tools: int = -1
+
+    async def generate_content_async(self, llm_request, stream=False):
+        self.seen_tools = len(llm_request.config.tools)
+        yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text="ok")]))
+
+
+async def test_fallback_does_not_mutate_original_request(tmp_path):
+    qwen = RecordingQwen(model="ollama_chat/qw")
+    env = Env(tmp_path, gemini=MutatingGemini(model="gem"), qwen=qwen)
+    req = request(config=types.GenerateContentConfig(tools=[types.Tool(
+        function_declarations=[types.FunctionDeclaration(name="search_material", description="d")])]))
+    await run(env, req)
+    assert qwen.seen_tools == 1
+    assert len(req.config.tools) == 1

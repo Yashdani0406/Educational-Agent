@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import pytest
 
@@ -118,3 +119,17 @@ def test_foreign_handler_survives(tmp_path):
 def test_noisy_libraries_quieted(tmp_path):
     configure_logging(make(tmp_path))
     assert logging.getLogger("litellm").level == logging.WARNING
+
+
+def test_exc_text_scrubbed_for_other_handlers(tmp_path):
+    configure_logging(make(tmp_path, gemini_api_key="AIzaSECRET"))
+    ours = next(h for h in logging.getLogger().handlers if getattr(h, "_eduagent", False))
+    try:
+        raise ValueError("bad AIzaSECRET")
+    except ValueError:
+        exc_info = sys.exc_info()
+    record = logging.LogRecord("eduagent.x", logging.ERROR, __file__, 1, "failed", None, exc_info)
+    ours.filter(record)  # adds trace_id
+    ours.format(record)  # logging.Formatter caches the raw traceback on record.exc_text
+    assert "AIzaSECRET" not in record.exc_text
+    assert "AIzaSECRET" not in logging.Formatter().format(record)  # a foreign handler

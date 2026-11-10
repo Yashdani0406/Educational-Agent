@@ -1,3 +1,6 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from eduagent.db.courses import CoursesRepo
@@ -71,3 +74,35 @@ def test_course_map_order_and_empty_module(repo):
     assert [n.name for n in nodes] == ["Zeta", "Alpha"]
     assert [t.name for t in nodes[0].topics] == ["apple", "banana", "Cherry"]
     assert nodes[1].topics == []
+
+
+def test_get_or_create_concurrent(repo):
+    c = repo.create_course("ML")
+    barrier = threading.Barrier(8)
+
+    def work(_):
+        barrier.wait()
+        return repo.add_topic(c.id, "Gini Index")
+
+    with ThreadPoolExecutor(8) as pool:
+        ids = list(pool.map(work, range(8)))
+    assert len(set(ids)) == 1
+    with repo._db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 1
+
+
+def test_link_topic_rejects_cross_course(repo):
+    a = repo.create_course("A")
+    b = repo.create_course("B")
+    m = repo.add_module(a.id, "M1")
+    t = repo.add_topic(b.id, "T")
+    with pytest.raises(ValueError, match="module and topic belong to different courses"):
+        repo.link_topic(m, t)
+
+
+def test_module_course(repo):
+    c = repo.create_course("ML")
+    m = repo.add_module(c.id, "M1")
+    assert repo.module_course(m) == c.id
+    with pytest.raises(KeyError):
+        repo.module_course(999)

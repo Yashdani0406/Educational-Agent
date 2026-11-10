@@ -29,7 +29,10 @@ class RedactingFormatter(logging.Formatter):
         self._secrets = [s for s in (secrets or []) if s and s.strip()]
 
     def format(self, record: logging.LogRecord) -> str:
-        return scrub(super().format(record), self._secrets)
+        text = super().format(record)  # caches the raw traceback on record.exc_text
+        if record.exc_text:  # other handlers reuse that cache, so scrub it too
+            record.exc_text = scrub(record.exc_text, self._secrets)
+        return scrub(text, self._secrets)
 
 
 def configure_logging(settings: Settings) -> Path:

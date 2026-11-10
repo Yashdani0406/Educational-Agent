@@ -29,8 +29,11 @@ def preflight(settings: Settings, fetch_ollama_models: Callable[[], list[str]]) 
         warnings.append("No GEMINI_API_KEY in .env — running everything on Qwen.")
     try:
         available = fetch_ollama_models()
-    except httpx.HTTPError:
+    except (httpx.HTTPError, httpx.InvalidURL):  # InvalidURL is not an HTTPError
         warnings.append("Ollama isn't running. Start it with: ollama serve")
+        return warnings
+    except (ValueError, KeyError, TypeError):  # reachable, but the answer isn't an Ollama tag list
+        warnings.append("Ollama answered with something unexpected (check OLLAMA_URL in .env).")
         return warnings
     for name in (settings.qwen_model, settings.embed_model):
         if not _has_model(name, available):

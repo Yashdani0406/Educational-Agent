@@ -1,9 +1,12 @@
 import httpx
+import pytest
 from pydantic import SecretStr
 
 from eduagent.config import Settings
 from eduagent.launcher import preflight
 
+NOT_RUNNING = "Ollama isn't running. Start it with: ollama serve"
+UNEXPECTED = "Ollama answered with something unexpected (check OLLAMA_URL in .env)."
 NO_KEY = "No GEMINI_API_KEY in .env — running everything on Qwen."
 
 
@@ -45,3 +48,19 @@ def test_preflight_no_key():
     ok = models("qwen3:4b-instruct", "nomic-embed-text:latest")
     assert preflight(make(key=None), ok) == [NO_KEY]
     assert preflight(make(key="  "), ok) == [NO_KEY]
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (ValueError("not json"), UNEXPECTED),
+        (KeyError("models"), UNEXPECTED),
+        (TypeError("bad"), UNEXPECTED),
+        (httpx.InvalidURL("bad"), NOT_RUNNING),
+    ],
+)
+def test_preflight_survives_malformed_tags(error, expected):
+    def odd():
+        raise error
+
+    assert expected in preflight(make(), odd)

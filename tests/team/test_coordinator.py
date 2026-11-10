@@ -51,3 +51,23 @@ async def test_no_trace_still_works(tmp_path):
     coord, _ = make(tmp_path, "coding")
     events, session = await chat(coord, "@notes make notes")
     assert session.state["last_agent"] == "notes_maker"
+
+
+async def test_attachment_routes_coding_in_coordinator(tmp_path):
+    coord, tracer = make(tmp_path, "tutor")
+    trace_id = tracer.start_trace("chat", "t")
+    token = current_trace_id.set(trace_id)
+    svc = InMemorySessionService()
+    runner = Runner(app_name="t", agent=coord, session_service=svc)
+    await svc.create_session(app_name="t", user_id="u", session_id="s")
+    msg = types.Content(role="user", parts=[
+        types.Part(text="look at this"),
+        types.Part(inline_data=types.Blob(data=b"png-bytes", mime_type="image/png")),
+    ])
+    try:
+        events = [e async for e in runner.run_async(user_id="u", session_id="s", new_message=msg)]
+    finally:
+        current_trace_id.reset(token)
+    assert [e for e in events if e.is_final_response()][-1].author == "coding"
+    step = next(s for s in tracer.get_trace(trace_id).steps if s.step_type == "route")
+    assert step.outputs["agent"] == "coding" and step.outputs["method"] == "code"

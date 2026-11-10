@@ -211,3 +211,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Rename `eduagent.agents` to `eduagent.team` so ADK's Runner no longer infers the app name "agents" from the folder; keep `APP_NAME = "eduagent"`.
 *Rejected:* Filtering the "App name mismatch" log line, or changing `APP_NAME` to "agents".
 *Why:* A log filter hides the symptom, the folder name is the cause. ADK sessions are keyed by `APP_NAME`, so changing it would orphan saved chats.
+
+## 2026-11-10 — INSERT ... ON CONFLICT for get-or-create
+*Chose:* `_get_or_create` runs `INSERT ... ON CONFLICT(course_id, name) DO NOTHING` then `SELECT id` on one connection.
+*Rejected:* SELECT-then-INSERT, which lets two concurrent taggers both miss and one hit an IntegrityError.
+*Why:* The unique index decides the winner atomically, so concurrent topic tagging always returns one row and one id.
+
+## 2026-11-10 — A second preflight wording for a reachable-but-odd Ollama
+*Chose:* Network errors (including an invalid URL) keep "Ollama isn't running. Start it with: ollama serve"; a bad or non-Ollama answer (ValueError, KeyError, TypeError) says "Ollama answered with something unexpected (check OLLAMA_URL in .env)."
+*Rejected:* One "isn't running" message for everything, or letting the exception crash start-up.
+*Why:* Telling the student to start a server that is already running (a wrong OLLAMA_URL) sends them the wrong way.

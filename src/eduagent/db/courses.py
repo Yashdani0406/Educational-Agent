@@ -60,16 +60,17 @@ class CoursesRepo:
         if not name:
             raise ValueError("name must not be blank")
         with self._db.connect() as conn:
+            # Atomic under concurrent tagging: the unique index on (course_id, name COLLATE NOCASE)
+            # decides the winner, so there is no SELECT-then-INSERT gap.
+            conn.execute(
+                f"INSERT INTO {table}(course_id, name, created_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(course_id, name) DO NOTHING",
+                (course_id, name, _now()),
+            )
             row = conn.execute(
                 f"SELECT id FROM {table} WHERE course_id = ? AND name = ?", (course_id, name)
             ).fetchone()
-            if row:
-                return row["id"]
-            cur = conn.execute(
-                f"INSERT INTO {table}(course_id, name, created_at) VALUES (?, ?, ?)",
-                (course_id, name, _now()),
-            )
-            return cur.lastrowid
+            return row["id"]
 
     def add_module(self, course_id: int, name: str) -> int:
         return self._get_or_create("modules", course_id, name)
@@ -77,8 +78,22 @@ class CoursesRepo:
     def add_topic(self, course_id: int, name: str) -> int:
         return self._get_or_create("topics", course_id, name)
 
+    def module_course(self, module_id: int) -> int:
+        with self._db.connect() as conn:
+            row = conn.execute("SELECT course_id FROM modules WHERE id = ?", (module_id,)).fetchone()
+        if row is None:
+            raise KeyError(module_id)
+        return row["course_id"]
+
     def link_topic(self, module_id: int, topic_id: int) -> None:
         with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT m.course_id = t.course_id AS same FROM modules m, topics t "
+                "WHERE m.id = ? AND t.id = ?",
+                (module_id, topic_id),
+            ).fetchone()
+            if row is not None and not row["same"]:
+                raise ValueError("module and topic belong to different courses")
             conn.execute(
                 "INSERT OR IGNORE INTO module_topics(module_id, topic_id) VALUES (?, ?)",
                 (module_id, topic_id),

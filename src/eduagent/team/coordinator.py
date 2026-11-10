@@ -26,7 +26,8 @@ class CoordinatorAgent(BaseAgent):
         parts = ctx.user_content.parts if ctx.user_content and ctx.user_content.parts else []
         text = "\n".join(p.text for p in parts if p.text and not p.thought)
         last_agent = ctx.session.state.get("last_agent")
-        decision = await route(text, last_agent, self.classify)
+        has_attachment = any(p.inline_data or p.file_data for p in parts)
+        decision = await route(text, last_agent, self.classify, has_attachment=has_attachment)
         log.info("routed to %s via %s", decision.agent, decision.method)
         log.debug("raw classifier label: %r", decision.raw_label)
         trace_id = current_trace_id.get()
