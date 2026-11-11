@@ -281,3 +281,23 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `chunks.rid INTEGER PRIMARY KEY` with `id TEXT NOT NULL UNIQUE`; each `chunks_fts` row uses `rid` as its rowid, and the upsert (`ON CONFLICT(id) DO UPDATE … RETURNING rid`) keeps `rid` when a chunk is overwritten (migration 0003 edited in place; it had never been applied).
 *Rejected:* Using the implicit rowid of a table whose primary key is the text `id`; linking FTS rows by the `chunk_id` text column.
 *Why:* SQLite only keeps rowids stable for tables with an explicit `INTEGER PRIMARY KEY`; VACUUM may renumber the others, which would silently join search hits to the wrong chunk text. The text column is not indexed inside FTS5, so linking by it would scan the whole index on every delete.
+
+## 2026-11-11 — Chroma runs as its own `chroma run` server, not embedded
+*Chose:* The launcher starts the Rust `chroma run --path data/chroma --host 127.0.0.1 --port 8001` and every component talks to it with `HttpClient`.
+*Rejected:* `PersistentClient` (embedded) and the Python FastAPI server.
+*Why:* The app and the KB MCP server are separate processes that both write; an embedded store allows only one process to own the files. The Python server is affected by CVE-2026-45829.
+
+## 2026-11-11 — An already-running Chroma on the port is reused
+*Chose:* `ChromaServer.start()` returns ready if the heartbeat already answers; `stop()` only stops a process this object started.
+*Rejected:* Failing, or killing whatever holds the port.
+*Why:* A second app start or a leftover server must not break the first or lose its data; we never stop something we did not start.
+
+## 2026-11-11 — Chroma holds vectors and filter metadata only
+*Chose:* Vector id = chunk id; metadata `chunk_id, course_id, module_id (0 = none), origin, file_id, kind, uploaded_week`; no text.
+*Rejected:* Storing chunk text in Chroma.
+*Why:* One copy of the text (SQLite); moving a file is one metadata update, deleting is `delete(where file_id)`.
+
+## 2026-11-11 — Chroma never gets an embedding function, and telemetry is off
+*Chose:* The collection is created with `embedding_function=None` (we always pass our own vectors) and `configuration={"hnsw": {"space": "cosine"}}`; the client uses `Settings(anonymized_telemetry=False)` and the server process gets `ANONYMIZED_TELEMETRY=False`.
+*Rejected:* Chroma's default embedding function; default telemetry.
+*Why:* The default would download an ONNX model to `C:\Users\...\.cache`, against the models-folder rule; the app is local and personal, so nothing is reported out.

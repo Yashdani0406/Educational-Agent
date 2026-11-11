@@ -4,9 +4,11 @@ import logging
 from collections.abc import Callable
 
 import httpx
-from nicegui import ui
+from nicegui import app, ui
 
 from eduagent.config import Settings
+from eduagent.kb.chroma_server import ChromaServer
+from eduagent.kb.models_dir import configure_model_dirs
 from eduagent.logging_setup import configure_logging
 from eduagent.services import build_services
 from eduagent.ui.app import apply_theme, register_pages
@@ -55,6 +57,13 @@ def main() -> None:
     warnings = preflight(settings, fetch_models)
     for warning in warnings:
         log.warning(warning)
+    configure_model_dirs(settings)
+    chroma = ChromaServer(settings)
+    chroma_warning = chroma.start()
+    if chroma_warning:
+        log.warning(chroma_warning)
+        warnings.append(chroma_warning)
+    app.on_shutdown(chroma.stop)
     services = build_services(settings)  # also creates and migrates the database
     services.warnings.extend(warnings)
     apply_theme()

@@ -64,3 +64,35 @@ def test_preflight_survives_malformed_tags(error, expected):
         raise error
 
     assert expected in preflight(make(), odd)
+
+
+def test_main_adds_chroma_warning(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from eduagent import launcher
+
+    seen = SimpleNamespace(warnings=[])
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(launcher, "preflight", lambda *a: [])
+    monkeypatch.setattr(launcher, "build_services", lambda s: seen)
+    monkeypatch.setattr(launcher, "configure_model_dirs", lambda s: None)
+    monkeypatch.setattr(launcher, "apply_theme", lambda: None)
+    monkeypatch.setattr(launcher, "register_pages", lambda s: None)
+    monkeypatch.setattr(launcher.ui, "run", lambda **kw: None)
+    stops = []
+    monkeypatch.setattr(launcher.app, "on_shutdown", stops.append)
+
+    class FakeChroma:
+        def __init__(self, settings):
+            pass
+
+        def start(self):
+            return "Chroma broke"
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(launcher, "ChromaServer", FakeChroma)
+    launcher.main()
+    assert "Chroma broke" in seen.warnings
+    assert len(stops) == 1

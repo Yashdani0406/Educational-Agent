@@ -4,6 +4,7 @@ import pytest
 
 MODULES = [
     "config", "logging_setup", "launcher", "services",
+    "kb.models_dir", "kb.chroma_server", "kb.store",
     "db.database", "db.courses", "db.threads", "db.files", "db.chunks",
     "tracing.redact", "tracing.tracer",
     "models.quota", "models.qwen", "models.router", "models.routed_llm",
