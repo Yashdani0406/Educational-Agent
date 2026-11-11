@@ -275,4 +275,9 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 ## 2026-11-11 — File ids are never reused (AUTOINCREMENT)
 *Chose:* `files.id INTEGER PRIMARY KEY AUTOINCREMENT` (migration 0003 edited in place; it had never been applied).
 *Rejected:* Plain `INTEGER PRIMARY KEY`.
-*Why:* SQLite reuses the id of a deleted highest row, but chunk ids (`f{file_id}-…`) and `removed_chunks` records must stay unique forever, or a new file's chunks could be mistaken for removed ones.
+*Why:* SQLite reuses the id of a deleted highest row, but chunk ids (`f{file_id}-…`) and `removed_chunks` records must stay unique forever, or a new file's chunks could be mistaken for removed ones, and an old citation to a deleted chunk would show the new file's text.
+
+## 2026-11-11 — Chunks have an explicit integer key for the keyword index
+*Chose:* `chunks.rid INTEGER PRIMARY KEY` with `id TEXT NOT NULL UNIQUE`; each `chunks_fts` row uses `rid` as its rowid, and the upsert (`ON CONFLICT(id) DO UPDATE … RETURNING rid`) keeps `rid` when a chunk is overwritten (migration 0003 edited in place; it had never been applied).
+*Rejected:* Using the implicit rowid of a table whose primary key is the text `id`; linking FTS rows by the `chunk_id` text column.
+*Why:* SQLite only keeps rowids stable for tables with an explicit `INTEGER PRIMARY KEY`; VACUUM may renumber the others, which would silently join search hits to the wrong chunk text. The text column is not indexed inside FTS5, so linking by it would scan the whole index on every delete.
