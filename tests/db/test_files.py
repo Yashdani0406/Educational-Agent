@@ -147,3 +147,11 @@ def test_setters_and_list(repo, db, course):
     assert [x.id for x in repo.list_course(course.id)] == [f.id]
     with pytest.raises(KeyError):
         repo.get(999)
+
+
+def test_deleted_file_id_never_reused(repo, course):
+    add(repo, course.id, "a.pdf")
+    b = add(repo, course.id, "b.pdf")
+    repo.delete(b.id)
+    c = add(repo, course.id, "c.pdf")
+    assert c.id != b.id

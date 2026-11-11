@@ -251,3 +251,28 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `week1_monday` and `uploaded_week` come from `clock().astimezone().date()`; `uploaded_at` stays ISO-8601 UTC text.
 *Rejected:* The UTC date.
 *Why:* A student uploading at 11 pm on a Sunday would otherwise get next week's label. Tests use 12:00 UTC clocks so they pass in any time zone.
+
+## 2026-11-11 — Keyword search is FTS5 inside study.db
+*Chose:* An FTS5 table `chunks_fts` in `study.db`, kept in step with `chunks` by `ChunksRepo` in the same transaction; each FTS row shares its chunk's rowid so deletes and joins are indexed.
+*Rejected:* Chroma's hybrid (keyword) search; a separate search engine.
+*Why:* Chroma's hybrid search is Cloud-only, and SQLite is already the source of truth for chunk text.
+
+## 2026-11-11 — Tokenizer keeps underscores and stems words
+*Chose:* `tokenize = "porter unicode61 tokenchars '_'"`.
+*Rejected:* The default unicode61 tokenizer.
+*Why:* `train_test_split` must stay one searchable term, and porter stemming lets "trees" find "tree".
+
+## 2026-11-11 — Search queries are quoted tokens joined by OR
+*Chose:* `fts_query` extracts word tokens (`\w+`), drops duplicates, double-quotes each and joins with ` OR `; no tokens means no search.
+*Rejected:* Passing the student's text to MATCH, or escaping only some characters.
+*Why:* Quoted tokens make FTS operators (`AND`, `NEAR`, `*`, quotes) inert, so user text can never raise a syntax error; OR with bm25 ranks chunks matching more terms higher.
+
+## 2026-11-11 — Chunk text is stored once, in SQLite
+*Chose:* `chunks` holds the text; `chunks_fts` indexes it; Chroma holds only vectors and filter metadata. Filters join `chunks` instead of duplicating columns in the FTS table.
+*Rejected:* Storing text in Chroma too.
+*Why:* One source of truth cannot drift; deleting a file means removing rows in SQLite plus vectors by id.
+
+## 2026-11-11 — File ids are never reused (AUTOINCREMENT)
+*Chose:* `files.id INTEGER PRIMARY KEY AUTOINCREMENT` (migration 0003 edited in place; it had never been applied).
+*Rejected:* Plain `INTEGER PRIMARY KEY`.
+*Why:* SQLite reuses the id of a deleted highest row, but chunk ids (`f{file_id}-…`) and `removed_chunks` records must stay unique forever, or a new file's chunks could be mistaken for removed ones.

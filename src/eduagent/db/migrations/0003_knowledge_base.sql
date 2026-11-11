@@ -1,7 +1,7 @@
 ALTER TABLE courses ADD COLUMN week1_monday TEXT;
 
 CREATE TABLE files (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER NOT NULL REFERENCES courses(id),
     module_id INTEGER REFERENCES modules(id),
     origin TEXT NOT NULL CHECK (origin IN ('module', 'reference')),
