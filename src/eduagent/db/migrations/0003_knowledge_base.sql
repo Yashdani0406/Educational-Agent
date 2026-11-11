@@ -37,7 +37,8 @@ CREATE TABLE file_pieces (
 );
 
 CREATE TABLE chunks (
-    id TEXT PRIMARY KEY,
+    rid INTEGER PRIMARY KEY,  -- explicit key: the FTS rowid; stable across VACUUM
+    id TEXT NOT NULL UNIQUE,
     file_id INTEGER NOT NULL REFERENCES files(id),
     course_id INTEGER NOT NULL,
     module_id INTEGER,

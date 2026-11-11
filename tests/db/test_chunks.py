@@ -138,6 +138,7 @@ def test_delete_file_records_removed(repo, db, files, courses, course):
     assert ids(repo.keyword_search("entropy", course.id, "module")) == [k.id]
     got = repo.removed([a.id, b.id, k.id])
     assert set(got) == {a.id, b.id}
+    assert files.get(f.id).title == "Lecture 1.pdf"  # the files row stays; the Ingestor's purge deletes it
     assert (got[a.id].reason, got[a.id].file_title, got[a.id].file_id) == ("deleted", "Lecture 1.pdf", f.id)
     assert got[a.id].removed_at == "2026-11-11T09:00:00+00:00"
     with db.connect() as conn:
@@ -150,10 +151,11 @@ def test_topic_chunks_order_and_module_filter(repo, files, courses, course):
     t = courses.add_topic(course.id, "Trees")
     f1 = make_file(files, course.id, "a.pdf", module_id=m1)
     f2 = make_file(files, course.id, "b.pdf", module_id=m2)
+    files.requeue(f1.id)  # f1 now sits behind f2 in the queue: queue_pos order differs from file id order
     c = [chunk(f2, 0, "b0", module_id=m2), chunk(f1, 1, "a1", module_id=m1), chunk(f1, 0, "a0", module_id=m1)]
     repo.upsert(c)
     repo.link_topics([(x.id, t) for x in c])
-    assert [x.text for x in repo.topic_chunks(t)] == ["a0", "a1", "b0"]
+    assert [x.text for x in repo.topic_chunks(t)] == ["b0", "a0", "a1"]
     assert [x.text for x in repo.topic_chunks(t, module_id=m2)] == ["b0"]
     assert [x.text for x in repo.topic_chunks(t, course_id=course.id + 99)] == []
     assert repo.topics_supported_in_module(m1) == {t}
@@ -164,3 +166,22 @@ def test_topic_chunks_order_and_module_filter(repo, files, courses, course):
     assert repo.topics_supported_in_module(m1) == {t}
     assert repo.get_many([c[2].id, "nope", c[0].id])[0].text == "a0"
     assert [x.module_id for x in repo.get_many([c[0].id])] == [m1]
+
+
+def test_search_stays_correct_after_vacuum(repo, db, files, course):
+    f1, f2 = make_file(files, course.id, "a.pdf"), make_file(files, course.id, "b.pdf")
+    first = [chunk(f1, i, f"alpha{i} common") for i in range(3)] + [chunk(f2, i, f"beta{i} common") for i in range(3)]
+    repo.upsert(first)
+    repo.delete_file(f1.id, "a.pdf", "deleted")
+    with db.connect() as conn:
+        conn.isolation_level = None  # VACUUM cannot run inside a transaction
+        conn.execute("VACUUM")
+    f3 = make_file(files, course.id, "c.pdf")
+    repo.upsert([chunk(f3, 0, "gamma0 common"), chunk(f3, 1, "gamma1 common")])
+    for word, owner in (("beta1", chunk_id(f2.id, 0, 1)), ("gamma1", chunk_id(f3.id, 0, 1))):
+        assert ids(repo.keyword_search(word, course.id, "module")) == [owner]
+        assert repo.get_many([owner])[0].text == f"{word} common"
+    assert ids(repo.keyword_search("alpha1", course.id, "module")) == []
+    assert len(repo.keyword_search("common", course.id, "module")) == 5
+    repo.delete_file(f2.id, "b.pdf", "deleted")
+    assert {i for i, _ in repo.keyword_search("common", course.id, "module")} == {chunk_id(f3.id, 0, 0), chunk_id(f3.id, 0, 1)}

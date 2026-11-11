@@ -82,21 +82,22 @@ class ChunksRepo:
         self._clock = clock
 
     def upsert(self, chunks: list[StoredChunk]) -> None:
-        """Chunk rows and their FTS rows in one transaction; the FTS rowid is the chunk's rowid."""
+        """Chunk rows and their FTS rows in one transaction; the FTS rowid is the chunk's explicit integer key (rid)."""
         with self._db.connect() as conn:
             for c in chunks:
-                # ON CONFLICT DO UPDATE keeps the rowid, so the FTS row below stays aligned.
-                conn.execute(
+                # ON CONFLICT DO UPDATE keeps rid, so the FTS row below stays aligned.
+                cur = conn.execute(
                     "INSERT INTO chunks(id, file_id, course_id, module_id, origin, kind, seq, text, heading_path, "
                     "loc_kind, loc_start, loc_end, word_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(id) DO UPDATE SET file_id=excluded.file_id, course_id=excluded.course_id, "
                     "module_id=excluded.module_id, origin=excluded.origin, kind=excluded.kind, seq=excluded.seq, "
                     "text=excluded.text, heading_path=excluded.heading_path, loc_kind=excluded.loc_kind, "
-                    "loc_start=excluded.loc_start, loc_end=excluded.loc_end, word_count=excluded.word_count",
+                    "loc_start=excluded.loc_start, loc_end=excluded.loc_end, word_count=excluded.word_count "
+                    "RETURNING rid",
                     (c.id, c.file_id, c.course_id, c.module_id, c.origin, c.kind, c.seq, c.text, c.heading_path,
                      c.loc_kind, c.loc_start, c.loc_end, c.word_count),
                 )
-                rowid = conn.execute("SELECT rowid FROM chunks WHERE id = ?", (c.id,)).fetchone()[0]
+                rowid = cur.fetchone()[0]
                 conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (rowid,))
                 conn.execute(
                     "INSERT INTO chunks_fts(rowid, chunk_id, heading, text) VALUES (?, ?, ?, ?)",
@@ -126,14 +127,14 @@ class ChunksRepo:
         removed_at = self._clock().astimezone(UTC).isoformat()
         with self._db.connect() as conn:
             rows = conn.execute(
-                "SELECT rowid, id FROM chunks WHERE file_id = ? ORDER BY seq", (file_id,)
+                "SELECT rid, id FROM chunks WHERE file_id = ? ORDER BY seq", (file_id,)
             ).fetchall()
             conn.executemany(
                 "INSERT OR REPLACE INTO removed_chunks(chunk_id, file_id, file_title, reason, removed_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 [(r["id"], file_id, file_title, reason, removed_at) for r in rows],
             )
-            conn.executemany("DELETE FROM chunks_fts WHERE rowid = ?", [(r["rowid"],) for r in rows])
+            conn.executemany("DELETE FROM chunks_fts WHERE rowid = ?", [(r["rid"],) for r in rows])
             conn.execute("DELETE FROM chunks WHERE file_id = ?", (file_id,))  # chunk_topics cascade
         log.info("removed %d chunks of file %s (%s)", len(rows), file_id, reason)
         return [r["id"] for r in rows]
@@ -169,7 +170,7 @@ class ChunksRepo:
             params.append(filters.topic_id)
         with self._db.connect() as conn:
             rows = conn.execute(
-                "SELECT c.id, -bm25(chunks_fts) AS score FROM chunks_fts JOIN chunks c ON c.rowid = chunks_fts.rowid "
+                "SELECT c.id, -bm25(chunks_fts) AS score FROM chunks_fts JOIN chunks c ON c.rid = chunks_fts.rowid "
                 f"WHERE {' AND '.join(where)} ORDER BY score DESC, c.id LIMIT ?",
                 (*params, limit),
             ).fetchall()

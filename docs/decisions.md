@@ -253,7 +253,7 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Why:* A student uploading at 11 pm on a Sunday would otherwise get next week's label. Tests use 12:00 UTC clocks so they pass in any time zone.
 
 ## 2026-11-11 — Keyword search is FTS5 inside study.db
-*Chose:* An FTS5 table `chunks_fts` in `study.db`, kept in step with `chunks` by `ChunksRepo` in the same transaction; each FTS row shares its chunk's rowid so deletes and joins are indexed.
+*Chose:* An FTS5 table `chunks_fts` in `study.db`, kept in step with `chunks` by `ChunksRepo` in the same transaction; each FTS row's rowid is the chunk's explicit integer key (`chunks.rid`, stable across VACUUM) so deletes and joins are indexed.
 *Rejected:* Chroma's hybrid (keyword) search; a separate search engine.
 *Why:* Chroma's hybrid search is Cloud-only, and SQLite is already the source of truth for chunk text.
 
