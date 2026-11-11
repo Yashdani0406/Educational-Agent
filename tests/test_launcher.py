@@ -82,9 +82,12 @@ def test_main_adds_chroma_warning(monkeypatch, tmp_path):
     stops = []
     monkeypatch.setattr(launcher.app, "on_shutdown", stops.append)
 
+    fake = None
+
     class FakeChroma:
         def __init__(self, settings):
-            pass
+            nonlocal fake
+            fake = self
 
         def start(self):
             return "Chroma broke"
@@ -95,4 +98,36 @@ def test_main_adds_chroma_warning(monkeypatch, tmp_path):
     monkeypatch.setattr(launcher, "ChromaServer", FakeChroma)
     launcher.main()
     assert "Chroma broke" in seen.warnings
-    assert len(stops) == 1
+    assert stops == [fake.stop]
+
+
+def test_main_stops_chroma_if_startup_fails(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from eduagent import launcher
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(launcher, "preflight", lambda *a: [])
+    monkeypatch.setattr(launcher, "configure_model_dirs", lambda s: None)
+    monkeypatch.setattr(launcher.app, "on_shutdown", lambda f: None)
+
+    def boom(settings):
+        raise RuntimeError("db broke")
+
+    monkeypatch.setattr(launcher, "build_services", boom)
+    calls = []
+
+    class FakeChroma:
+        def __init__(self, settings):
+            pass
+
+        def start(self):
+            return None
+
+        def stop(self):
+            calls.append("stop")
+
+    monkeypatch.setattr(launcher, "ChromaServer", FakeChroma)
+    with pytest.raises(RuntimeError, match="db broke"):
+        launcher.main()
+    assert calls == ["stop"]

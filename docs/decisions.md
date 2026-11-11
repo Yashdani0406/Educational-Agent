@@ -298,6 +298,16 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Why:* One copy of the text (SQLite); moving a file is one metadata update, deleting is `delete(where file_id)`.
 
 ## 2026-11-11 — Chroma never gets an embedding function, and telemetry is off
-*Chose:* The collection is created with `embedding_function=None` (we always pass our own vectors) and `configuration={"hnsw": {"space": "cosine"}}`; the client uses `Settings(anonymized_telemetry=False)` and the server process gets `ANONYMIZED_TELEMETRY=False`.
+*Chose:* The collection is created with `embedding_function=None` (we always pass our own vectors) and `configuration={"hnsw": {"space": "cosine"}}`; the client uses `Settings(anonymized_telemetry=False)` and as a best effort the server process also gets `ANONYMIZED_TELEMETRY=False` and `CHROMA_ANONYMIZED_TELEMETRY=False` (`chroma run --help` documents no telemetry flag, so these are set in case the server reads them).
 *Rejected:* Chroma's default embedding function; default telemetry.
-*Why:* The default would download an ONNX model to `C:\Users\...\.cache`, against the models-folder rule; the app is local and personal, so nothing is reported out.
+*Why:* The default would download an ONNX model to `C:\Users\...\.cache`, against the models-folder rule; the app is local and personal, so nothing should be reported out.
+
+## 2026-11-11 — Only a Chroma server we can prove is ours is reused (R12)
+*Chose:* When the launcher starts Chroma it writes `data/chroma_server.json` (pid, port, resolved chroma folder), beside `data/chroma`, and removes it when it stops the server. A server already answering the heartbeat is adopted (and stopped on exit) only if the marker matches our port and folder and its pid is alive; otherwise start returns the "didn't start ... port N is already used by another program" warning and never touches that server. A stale marker is overwritten by the next launch.
+*Rejected:* Reusing any server that answers the heartbeat (the earlier behaviour).
+*Why:* After a crash the orphan would be reused forever and never stopped, and the app could silently attach to someone else's Chroma (other data folder, a Python server, or one bound beyond localhost), breaking the Rust-only, localhost-only rule. Failing closed costs one warning.
+
+## 2026-11-11 — Model cache variables are overridden, not defaulted (R13)
+*Chose:* `configure_model_dirs` always sets `HF_HOME`, `FASTEMBED_CACHE_PATH` and `DOCLING_ARTIFACTS_PATH` to folders under `models_dir`, and logs at INFO when it replaces an existing different value.
+*Rejected:* `os.environ.setdefault`.
+*Why:* A `HF_HOME` already pointing at the user's `.cache` folder would send downloads there and break "all models live under data/models".

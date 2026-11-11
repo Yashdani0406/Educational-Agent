@@ -63,9 +63,13 @@ def main() -> None:
     if chroma_warning:
         log.warning(chroma_warning)
         warnings.append(chroma_warning)
-    app.on_shutdown(chroma.stop)
-    services = build_services(settings)  # also creates and migrates the database
-    services.warnings.extend(warnings)
-    apply_theme()
-    register_pages(services)
-    ui.run(host="127.0.0.1", port=8000, title="Educational Agent", reload=False, show=True)
+    try:
+        app.on_shutdown(chroma.stop)
+        services = build_services(settings)  # also creates and migrates the database
+        services.warnings.extend(warnings)
+        apply_theme()
+        register_pages(services)
+        ui.run(host="127.0.0.1", port=8000, title="Educational Agent", reload=False, show=True)
+    except BaseException:
+        chroma.stop()  # on_shutdown never fires if start-up fails
+        raise
