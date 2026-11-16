@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 
 from eduagent.config import Settings
@@ -19,7 +22,7 @@ class FakeEncoder:
 @pytest.fixture
 def fake(monkeypatch):
     FakeEncoder.instances = []
-    monkeypatch.setattr(rerank, "TextCrossEncoder", FakeEncoder)
+    monkeypatch.setattr(rerank, "_encoder_class", lambda: FakeEncoder)
     return FakeEncoder
 
 
@@ -43,6 +46,11 @@ def test_score_order_kept_and_model_loaded_once(fake, tmp_path):
 def test_empty_input_does_not_load_model(fake, tmp_path):
     assert Reranker(Settings(_env_file=None, models_dir=tmp_path)).score("q", []) == []
     assert fake.instances == []
+
+
+def test_importing_module_does_not_load_fastembed_or_huggingface():
+    code = "import sys, eduagent.kb.rerank; sys.exit(any(m.split('.')[0] in ('fastembed', 'huggingface_hub') for m in sys.modules))"
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
 
 
 GINI = (
