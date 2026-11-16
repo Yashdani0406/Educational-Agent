@@ -346,3 +346,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `split_sentences` returns stripped substrings of the input in order, so no text is added, rewritten or lost apart from whitespace. `parse_markdown` keeps fence lines (with the language tag) in a code block's text, and an unclosed fence runs to the end of the document, as in CommonMark.
 *Rejected:* Rebuilding sentences or dropping fence lines.
 *Why:* Chunk text must be quotable from the source exactly, and the language tag helps the tutor read code.
+
+## 2026-11-16 — Numbered lines are boundaries only after a finished line (R18)
+*Chose:* A single newline before a bullet (`-`, `*`, `•`) is always a sentence boundary. A single newline before a numbered marker (1–2 digits then `.` or `)`) is a boundary only when the previous line ends with `.`, `?`, `!` (plus closers) or `:`, or itself starts with a list marker. The "line-leading number is not a sentence end" protection applies to 1–2-digit numbers only, so a year like `1986.` still ends a sentence. This replaces the numbered-list part of R16.
+*Rejected:* Cutting before every line that starts with a number.
+*Why:* Hard-wrapped text often wraps right before a number ("The answer was\n42. Then..."); cutting there splits a sentence in half. Under-splitting is safe, mid-sentence cuts are not. The splitter also looks back over a bounded window only, so a transcript pasted on one line splits in linear time.
