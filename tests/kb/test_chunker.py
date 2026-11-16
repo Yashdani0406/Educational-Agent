@@ -42,7 +42,7 @@ def test_one_chunk_per_slide_with_notes():
         ("Gini", "slide", 1, 1), ("Entropy", "slide", 2, 2)]
     assert chunks[1].text.endswith("\n\nSpeaker notes: Say this slowly.")
     assert "Speaker notes" not in chunks[0].text
-    assert chunks[1].word_count == 40 + 5  # notes count
+    assert chunks[1].word_count == 40 + 3  # notes words count, the "Speaker notes:" label does not
     assert open_path == []
 
 
@@ -62,9 +62,10 @@ def test_short_slides_merge_into_next():
 
 
 def test_short_slides_keep_merging_until_25_words():
-    blocks = sum((slide(n, f"S{n}", 8, start=n * 10) for n in range(1, 5)), []) + slide(5, "S5", 40, start=500)
+    blocks = sum((slide(n, f"S{n}", 6, start=n * 10) for n in range(1, 6)), []) + slide(6, "S6", 40, start=500)
     chunks, _ = run(blocks, "slides")
-    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 4), (5, 5)]  # 8+8+8 = 24 < 25, so slide 4 joins too
+    # titles of merged slides stay in the text: 6, 13, 20 words are all under 25, so slide 4 joins too (27)
+    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 4), (5, 6)]
 
 
 def test_last_short_slide_merges_into_previous():
@@ -136,6 +137,24 @@ def test_never_mid_sentence():
         chunks, _ = run(blocks, layout)
         assert len(chunks) > 1
         assert all(c.text.rstrip().endswith(".") for c in chunks), layout
+
+
+def test_never_mid_sentence_in_slides_and_around_atomic_blocks():
+    """Prose ends at a full stop and atomic blocks at a whole line; only the R22 forced cuts are exempt."""
+    # a slide with 20 body words and 900 words of notes in one paragraph (it is over 800 words)
+    slide_blocks = [Block("Big", "heading", 1, loc=4), Block(gen(5000, 20), "text", loc=4), Block(gen(0, 900, 15), "notes", loc=4)]
+    chunks, _ = run(slide_blocks, "slides")
+    assert len(chunks) > 1
+    assert all(c.text.rstrip().endswith(".") and (c.loc_start, c.loc_end) == (4, 4) for c in chunks)
+    # a slide with a table that is over the word maximum: every cut is at a line end
+    table = "\n".join(f"r{i} | " + " ".join(f"c{i}x{j}" for j in range(8)) + ";" for i in range(120))
+    chunks, _ = run([Block("T", "heading", 1, loc=2), Block(gen(0, 30), "text", loc=2), Block(table, "table", loc=2)], "slides")
+    assert len(chunks) > 1 and all(c.text.rstrip()[-1] in ".;" for c in chunks)
+    for layout in ("document", "markdown", "text"):
+        blocks = [Block(gen(0, 300, 12), "text", loc=1), Block(table, "code", loc=2, loc_end=121),
+                  Block(gen(900, 300, 12), "text", loc=122)]
+        chunks, _ = run(blocks, layout)
+        assert all(c.text.rstrip()[-1] in ".;" for c in chunks), layout
 
 
 def test_unpunctuated_transcript_is_cut_at_words_and_loses_nothing():
@@ -295,9 +314,14 @@ def test_seq_counts_from_first_seq():
 
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_no_text_lost_and_in_order(layout):
+    """Every word of every block, headings included, is in a chunk's path or text, in order."""
     blocks, expected, n = [], [], 0
     for s in range(1, 5):
-        blocks.append(Block(f"Head {s}", "heading", 1, loc=s))
+        blocks.append(Block(f"Head{s}x", "heading", 1, loc=s))
+        expected.append(f"Head{s}x")
+        if layout == "slides":  # a second heading on the slide must stay as text
+            blocks.append(Block(f"Extra{s}y", "heading", 2, loc=s))
+            expected.append(f"Extra{s}y")
         for kind, size in (("text", 300), ("table", 60), ("code", 40), ("formula", 3), ("text", 700), ("notes", 20)):
             text = gen(n, size)
             if kind in ("table", "code"):
@@ -306,9 +330,71 @@ def test_no_text_lost_and_in_order(layout):
             expected += text.split()
             n += size
     chunks, _ = run(blocks, layout)
-    got = " ".join(c.text for c in chunks).replace("Speaker notes:", "").split()
+    got = " ".join(c.heading_path + " " + c.text for c in chunks).replace("Speaker notes:", "").replace(">", "").split()
     it = iter(got)
     assert all(w in it for w in expected), layout  # in-order subsequence (overlap repeats are fine)
+
+
+def test_stray_headings_stay_in_the_text():
+    # merged slides: later titles are text lines
+    blocks = slide(1, "Alpha", 6) + slide(2, "Beta", 6, start=50) + slide(3, "Gamma", 40, start=100)
+    (c,), _ = run(blocks, "slides")
+    assert c.heading_path == "Alpha" and "\nBeta\n" in c.text.replace("\n\n", "\n") and "Gamma" in c.text
+    assert "Alpha" not in c.text  # the path title is not repeated
+    # a title-only divider slide followed by a content slide: both titles findable
+    blocks = [Block("Part 2: Pruning", "heading", 1, loc=3), Block("Cost complexity", "heading", 1, loc=4),
+              Block(gen(0, 30), "text", loc=4)]
+    (c,), _ = run(blocks, "slides")
+    assert c.heading_path == "Part 2: Pruning" and "Cost complexity" in c.text and (c.loc_start, c.loc_end) == (3, 4)
+    # a second heading on one slide
+    blocks = [Block("Main", "heading", 1, loc=1), Block("Side note", "heading", 2, loc=1), Block(gen(0, 40), "text", loc=1)]
+    (c,), _ = run(blocks, "slides")
+    assert c.heading_path == "Main" and c.text.startswith("Side note\n\n")
+    # a last heading-only slide merges back and extends the range
+    blocks = slide(1, "A", 30) + [Block("Questions?", "heading", 1, loc=2)]
+    (c,), _ = run(blocks, "slides")
+    assert (c.loc_start, c.loc_end) == (1, 2) and c.text.endswith("Questions?")
+
+
+def test_single_title_only_slide_gives_one_chunk():
+    (c,), _ = run([Block("Title only", "heading", 1, loc=1)], "slides")
+    assert (c.text, c.heading_path, c.loc_start, c.loc_end) == ("Title only", "Title only", 1, 1)
+
+
+def test_docx_whole_document_keeps_its_headings():
+    blocks = [Block("Intro", "heading", 1), Block(gen(0, 20), "text"), Block("Details", "heading", 2), Block(gen(50, 20), "text")]
+    (c,), _ = run(blocks, "docx")
+    assert c.heading_path == "" and "Intro" in c.text and "\nDetails\n" in c.text.replace("\n\n", "\n")
+
+
+@pytest.mark.parametrize("layout", ["markdown", "text", "document"])
+def test_atomic_block_under_800_words_stays_whole(layout):
+    code = "\n".join(" ".join(f"c{i}_{j}" for j in range(10)) for i in range(60))  # 600 words
+    chunks, _ = run([Block(code, "code", loc=2, loc_end=61)], layout)
+    assert len(chunks) == 1 and chunks[0].text == code
+
+
+def test_atomic_block_over_800_words_is_cut_by_lines_with_own_line_numbers():
+    code = "\n".join(" ".join(f"c{i}_{j}" for j in range(10)) for i in range(100))  # 1000 words on lines 11..110
+    chunks, _ = run([Block(code, "code", loc=11, loc_end=110)], "markdown")
+    assert len(chunks) > 1
+    lines = [c.text.split("\n") for c in chunks]
+    assert [x for ls in lines for x in ls] == code.split("\n")
+    start = 11
+    for c, ls in zip(chunks, lines):
+        assert (c.loc_start, c.loc_end) == (start, start + len(ls) - 1)
+        start += len(ls)
+
+
+def test_unpunctuated_multiline_transcript_cites_its_own_lines():
+    t = "\n".join(" ".join(f"u{i}_{j}" for j in range(10)) for i in range(300))
+    chunks, _ = run([Block(t, "text", loc=1, loc_end=300)], "text")
+    ranges = [(c.loc_start, c.loc_end) for c in chunks]
+    assert len(set(ranges)) == len(ranges) > 1
+    assert ranges[0][0] == 1 and ranges[-1][1] == 300
+    assert all(a[1] < b[1] and a[0] < b[0] for a, b in zip(ranges, ranges[1:]))
+    assert all(b[0] <= a[1] + 1 for a, b in zip(ranges, ranges[1:]))  # no gap between windows
+    assert all("\n" in c.text for c in chunks) and max(c.word_count for c in chunks) <= 500
 
 
 @pytest.mark.parametrize("layout", LAYOUTS)

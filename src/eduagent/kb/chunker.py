@@ -21,6 +21,7 @@ SECTION_MAX = 800
 SECTION_OVERLAP_SENTENCES = 2
 TEXT_TARGET = (400, 500)
 TEXT_OVERLAP = 0.15
+_NOTES_LABEL = "Speaker notes:"
 _OVERLAP_MAX_WORDS = 90  # a whole-sentence overlap never grows past this, so windows share about 15%
 _ATOMIC = ("table", "code", "formula")  # never split unless over the cap or the hard maximum
 _LOC_KIND: dict[str, LocKind] = {
@@ -45,6 +46,7 @@ class _Piece(NamedTuple):
     heading_path: str
     loc_start: int | None
     loc_end: int | None
+    blocks: tuple = ()  # slides only: the content blocks, kept so an oversize slide can go through the sentence path
 
 
 @dataclass(frozen=True)
@@ -110,29 +112,35 @@ def _largest_prefix(n: int, ok: Callable[[int], bool]) -> int:
     return lo
 
 
-def _split_to_fit(text: str, ok: Callable[[str], bool], level: int) -> list[str]:
-    """Forced cut: by lines (level 0), then whitespace (1), then characters (2), until every piece satisfies `ok`."""
+def _split_to_fit(text: str, ok: Callable[[str], bool], level: int = 0) -> list[tuple[str, int]]:
+    """Forced cut: by lines (level 0), then whitespace (1), then characters (2), until every piece satisfies `ok`.
+
+    Returns (piece, number of newlines before it in `text`); pieces keep their own newlines."""
     if ok(text):
-        return [text]
+        return [(text, 0)]
     if level == 2:
-        out = []
-        while text:
-            k = _largest_prefix(len(text), lambda n: ok(text[:n])) or 1
-            out.append(text[:k])
-            text = text[k:]
+        out, pos = [], 0
+        while pos < len(text):
+            k = _largest_prefix(len(text) - pos, lambda n: ok(text[pos : pos + n])) or 1
+            out.append((text[pos : pos + k], 0))
+            pos += k
         return out
     parts = text.split("\n") if level == 0 else text.split()
     glue = "\n" if level == 0 else " "
     out, i = [], 0
     while i < len(parts):
+        base = i if level == 0 else 0
         k = _largest_prefix(len(parts) - i, lambda n: ok(glue.join(parts[i : i + n])))
         if k == 0:
-            out.extend(_split_to_fit(parts[i], ok, level + 1))
+            out += [(t, base + o) for t, o in _split_to_fit(parts[i], ok, level + 1)]
             i += 1
-        else:
-            out.append(glue.join(parts[i : i + k]))
-            i += k
-    return [p for p in out if p.strip()]
+            continue
+        piece = glue.join(parts[i : i + k])
+        if piece.strip():
+            lead = piece[: len(piece) - len(piece.lstrip())].count("\n")
+            out.append((piece.strip(), base + lead))
+        i += k
+    return out
 
 
 def _join(atoms: list[_Atom]) -> str:
@@ -182,20 +190,39 @@ class _Chunker:
                 yield s, sep, b.loc, b.loc_end
             pos = i + len(s)
 
+    def _forced(self, text: str, hp: str, lo: int | None, hi: int | None, sep: str) -> list[_Atom]:
+        """Forced pieces of one sentence or block; text and Markdown pieces cite only their own lines."""
+        out: list[_Atom] = []
+        prev_end = -1
+        for i, (piece, off) in enumerate(_split_to_fit(text, self._piece_ok(hp))):
+            plo, phi = lo, hi
+            if self.layout in ("text", "markdown") and lo is not None:
+                plo = lo + off
+                phi = plo + piece.count("\n")
+                if hi is not None:
+                    phi = max(plo, min(phi, hi))
+            joiner = sep if i == 0 else "\n" if off > prev_end else " "
+            prev_end = off + piece.count("\n")
+            out.append(_Atom(piece, joiner, plo, phi, word_count(piece)))
+        return out
+
     def atoms(self, blocks: list[Block], hp: str) -> list[_Atom]:
         out: list[_Atom] = []
-        ok = self._piece_ok(hp)
         for b in blocks:
             if b.kind == "heading" or not b.text.strip():
                 continue
             if b.kind in _ATOMIC:
                 text = b.text.strip()
-                parts = _split_to_fit(text, ok, 0) if self._oversize(text, hp) else [text]
-                out += [_Atom(p, "\n\n" if i == 0 else "\n", b.loc, b.loc_end, word_count(p)) for i, p in enumerate(parts)]
+                if word_count(text) > SECTION_MAX or not self.cap_ok(text, hp):
+                    out += self._forced(text, hp, b.loc, b.loc_end, "\n\n")
+                else:
+                    out.append(_Atom(text, "\n\n", b.loc, b.loc_end, word_count(text)))
                 continue
             for s, sep, lo, hi in self._sentences(b):
-                parts = _split_to_fit(s, ok, 1) if self._oversize(s, hp) else [s]
-                out += [_Atom(p, sep if i == 0 else " ", lo, hi, word_count(p)) for i, p in enumerate(parts)]
+                if self._oversize(s, hp):
+                    out += self._forced(s, hp, lo, hi, sep)
+                else:
+                    out.append(_Atom(s, sep, lo, hi, word_count(s)))
         return out
 
     # ---- packing ----
@@ -253,7 +280,8 @@ class _Chunker:
         return [p for sec_hp, sec_blocks in sections for p in self.section(sec_blocks, sec_hp)], stack
 
     def _whole_docx(self, blocks: list[Block]) -> _Piece | None:
-        body = [b for b in blocks if b.kind != "heading"]
+        # headings stay in the text, on their own lines, because the whole-document chunk has no heading path
+        body = [Block(b.text, "text", loc=b.loc, loc_end=b.loc_end) if b.kind == "heading" else b for b in blocks]
         if sum(word_count(b.text) for b in body) >= SECTION_MAX:
             return None
         atoms = self.atoms(body, "")
@@ -274,41 +302,63 @@ class _Chunker:
         for u in units:
             if acc is None:
                 acc = u
-            elif word_count(acc.text) < SLIDE_MIN_WORDS and self._can_merge(acc, u):
+            elif self.words(acc.text) < SLIDE_MIN_WORDS and self._can_merge(acc, u):
                 acc = _merge(acc, u)
             else:
                 merged.append(acc)
                 acc = u
         if acc is not None:
-            if merged and word_count(acc.text) < SLIDE_MIN_WORDS and self._can_merge(merged[-1], acc):
+            if merged and self.words(acc.text) < SLIDE_MIN_WORDS and self._can_merge(merged[-1], acc):
                 merged[-1] = _merge(merged[-1], acc)
             else:
                 merged.append(acc)
         out: list[_Piece] = []
         for u in merged:
-            if not u.text.strip():
+            text = u.text or u.heading_path  # a title-only slide still contributes its title
+            if not text.strip():
                 continue
-            if self._oversize(u.text, u.heading_path):
-                out += [u._replace(text=t) for t in _split_to_fit(u.text, self._piece_ok(u.heading_path), 0)]
+            if u.blocks and self._oversize(text, u.heading_path):
+                atoms = self.atoms(list(u.blocks), u.heading_path)
+                out += [_Piece(_join(g), u.heading_path, u.loc_start, u.loc_end) for g in self.pack(atoms, u.heading_path)]
             else:
-                out.append(u)
+                out.append(u._replace(text=text, blocks=()))
         return out
 
+    def words(self, text: str) -> int:
+        """Words in a chunk's text; the "Speaker notes:" label is ours, not the course's."""
+        return word_count(text) - (2 * text.count(_NOTES_LABEL) if self.layout == "slides" else 0)
+
     def _slide(self, blocks: list[Block]) -> _Piece:
-        hp = next((b.text.strip() for b in blocks if b.kind == "heading" and b.text.strip()), "")
-        body = "\n\n".join(b.text.strip() for b in blocks if b.kind not in ("heading", "notes") and b.text.strip())
-        notes = "\n\n".join(b.text.strip() for b in blocks if b.kind == "notes" and b.text.strip())
-        text = body + ("\n\nSpeaker notes: " + notes if notes and body else "Speaker notes: " + notes if notes else "")
-        return _Piece(text, hp, *_span(blocks))
+        """First heading = path; other headings stay as text lines; notes go last under a label."""
+        hp, content, notes, seen = "", [], [], False
+        for b in blocks:
+            t = b.text.strip()
+            if not t:
+                continue
+            if b.kind == "heading" and not seen:
+                hp, seen = t, True
+            elif b.kind == "heading":
+                content.append(Block(t, "text", loc=b.loc, loc_end=b.loc_end))
+            elif b.kind == "notes":
+                notes.append(b)
+            else:
+                content.append(b)
+        if notes:
+            joined = _NOTES_LABEL + " " + "\n\n".join(n.text.strip() for n in notes)
+            content.append(Block(joined, "text", loc=notes[0].loc, loc_end=notes[0].loc_end))
+        text = "\n\n".join(b.text.strip() for b in content)
+        return _Piece(text, hp, *_span(blocks), blocks=tuple(content))
 
     def _can_merge(self, a: _Piece, b: _Piece) -> bool:
         m = _merge(a, b)
-        return word_count(m.text) <= self.rules.hard and self.cap_ok(m.text, m.heading_path)
+        return self.words(m.text) <= self.rules.hard and self.cap_ok(m.text, m.heading_path)
 
 
 def _merge(a: _Piece, b: _Piece) -> _Piece:
     locs = [x for x in (a.loc_start, a.loc_end, b.loc_start, b.loc_end) if x is not None]
-    text = "\n\n".join(t for t in (a.text, b.text) if t)
+    # a later slide's own title is not the path any more, so it stays in the text
+    b_text = "\n\n".join(t for t in (b.heading_path, b.text) if t) if a.heading_path else b.text
+    text = "\n\n".join(t for t in (a.text, b_text) if t)
     return _Piece(text, a.heading_path or b.heading_path, min(locs, default=None), max(locs, default=None))
 
 
@@ -331,7 +381,7 @@ def chunk_blocks(
         pieces, open_path = chunker.sections(blocks, carry_headings)
     kind = _LOC_KIND[layout]
     drafts = [
-        ChunkDraft(first_seq + i, p.text, p.heading_path, kind, p.loc_start, p.loc_end, word_count(p.text))
+        ChunkDraft(first_seq + i, p.text, p.heading_path, kind, p.loc_start, p.loc_end, chunker.words(p.text))
         for i, p in enumerate(pieces)
     ]
     log.debug("chunked %d blocks (%s) into %d chunks", len(blocks), layout, len(drafts))

@@ -381,3 +381,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Short slides merge forward until the chunk has 25 words (speaker notes count), the last short group merges back, and a merge that would pass the cap is skipped. Locations are the min/max of the contributing blocks; text and Markdown count lines per sentence, so a window cites only its own lines; web and DOCX pass block locations through.
 *Rejected:* Citing the whole block for every window.
 *Why:* A citation should point at the lines the chunk actually contains.
+
+## 2026-11-16 — Headings that are not in the path stay in the text (R23)
+*Chose:* A heading whose text is not in the chunk's `heading_path` stays in the chunk text on its own line: titles of later slides in a merged group, extra headings on one slide, and every heading inside a DOCX whole-document chunk. A title-only slide contributes its title as text when nothing else carries it. Headings that are in the path are not repeated. Atomic blocks are split only over 800 words or the cap, oversize slides go through the normal sentence path, and forced pieces keep their own newlines and line numbers.
+*Rejected:* Dropping such headings, or repeating every heading in the text.
+*Why:* A slide title is often the only place a term appears, so losing it makes that slide unfindable by keyword; repeating path headings would only add noise.
