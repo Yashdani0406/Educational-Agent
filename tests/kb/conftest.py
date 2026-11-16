@@ -4,6 +4,11 @@ import pytest
 
 from eduagent.config import Settings
 from eduagent.kb.chroma_server import ChromaServer
+from eduagent.kb.models_dir import configure_model_dirs
+
+# huggingface_hub reads HF_HOME once at import and some test modules import model libraries at
+# collection, so point downloads at data/models first (nothing may go to C:/Users/...).
+configure_model_dirs(Settings(_env_file=None))
 
 
 def free_port() -> int:

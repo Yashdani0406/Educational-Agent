@@ -4,7 +4,7 @@ import pytest
 
 MODULES = [
     "config", "logging_setup", "launcher", "services",
-    "kb.models_dir", "kb.types", "kb.sentences", "kb.text_parser", "kb.chunker", "kb.chroma_server", "kb.store", "kb.embed", "kb.rerank",
+    "kb.models_dir", "kb.peek", "kb.docling_parser", "kb.types", "kb.sentences", "kb.text_parser", "kb.chunker", "kb.chroma_server", "kb.store", "kb.embed", "kb.rerank",
     "db.database", "db.courses", "db.threads", "db.files", "db.chunks",
     "tracing.redact", "tracing.tracer",
     "models.quota", "models.qwen", "models.router", "models.routed_llm",

@@ -386,3 +386,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* A heading whose text is not in the chunk's `heading_path` stays in the chunk text on its own line: titles of later slides in a merged group, extra headings on one slide, and every heading inside a DOCX whole-document chunk. A title-only slide contributes its title as text when nothing else carries it. Headings that are in the path are not repeated. Atomic blocks are split only over 800 words or the cap, oversize slides go through the normal sentence path, and forced pieces keep their own newlines and line numbers.
 *Rejected:* Dropping such headings, or repeating every heading in the text.
 *Why:* A slide title is often the only place a term appears, so losing it makes that slide unfindable by keyword; repeating path headings would only add noise.
+
+## 2026-11-16 — Docling with formula enrichment, picture-only OCR, models under data/models
+*Chose:* Docling (2.150.1 installed) parses PDF, PPTX and DOCX with formula enrichment on; a formula it cannot decode becomes the marker `[formula, see page N]` (or `slide N`). OCR is RapidOCR (English, onnxruntime) in `OcrMode.PDF_AWARE_LAYOUT_REGIONS`, which skips regions that already carry PDF text and reads only pictures and bitmaps. Speaker notes come from `ContentLayer.NOTES` and become `notes` blocks. All Docling and RapidOCR models are fetched once into `data/models/docling` (marker file `.ready` stops later network checks); the picture classifier is not downloaded.
+*Rejected:* `OcrMode.FULL_PAGE` (slow, and re-reads good text), Docling's default RapidOCR download into the package folder.
+*Why:* Formulas are common in the course material and a visible marker beats silent loss; text pages must not pay for OCR; nothing may land in the user's C: cache.
+
+## 2026-11-16 — Landscape majority means slides; pypdfium2 checks before Docling
+*Chose:* A PDF whose pages are mostly landscape is laid out as "slides", otherwise "document". pypdfium2 does the page count, orientation, text-layer check, password and not-a-PDF checks (plain-English `IngestError`) before the slow Docling run, in 25-page ranges.
+*Rejected:* Sending every file to Docling first and failing there.
+*Why:* A locked, fake or scanned file should fail in milliseconds with a reason the student can act on.
