@@ -311,3 +311,18 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `configure_model_dirs` always sets `HF_HOME`, `FASTEMBED_CACHE_PATH` and `DOCLING_ARTIFACTS_PATH` to folders under `models_dir`, and logs at INFO when it replaces an existing different value.
 *Rejected:* `os.environ.setdefault`.
 *Why:* A `HF_HOME` already pointing at the user's `.cache` folder would send downloads there and break "all models live under data/models".
+
+## 2026-11-16 — fastembed runs the reranker
+*Chose:* fastembed `TextCrossEncoder("Xenova/ms-marco-MiniLM-L-6-v2")` with `cache_dir` under the models folder, loaded on first use. It pulled in no torch (only loguru, pillow, py-rust-stemmers, win32-setctime).
+*Rejected:* FlashRank; sentence-transformers (needs torch).
+*Why:* ONNX only, ships the exact MiniLM-L6 cross-encoder the design names, and its cache folder can be pointed at `data/models`.
+
+## 2026-11-16 — Embeddings use `truncate: false` plus a character cap
+*Chose:* Every `/api/embed` call sends `"truncate": false`, and the embedder refuses any text over 4,500 characters (about 1,500 tokens of prose) before sending. It never sends `num_ctx`, and sends `num_gpu: 0` unless `OLLAMA_USE_GPU` is on (R14).
+*Rejected:* Letting Ollama truncate; sending the Qwen options.
+*Why:* Silent truncation was measured on 2026-11-09 and would index only the start of a chunk. The laptop's 2 GB GPU crashed Ollama on CUDA init, and the limits were measured on CPU with the model's own 2048-token context.
+
+## 2026-11-16 — `clustering:` prefix for topic-name similarity
+*Chose:* Topic names are embedded with nomic's `clustering: ` prefix (`embed_labels`), separate from `search_document: ` and `search_query: `.
+*Rejected:* Reusing the document or query prefix for names.
+*Why:* Comparing short labels with each other is a clustering task; nomic-embed-text defines that prefix for it.
