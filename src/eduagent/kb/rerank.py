@@ -1,6 +1,7 @@
 """Re-orders search results with a small local cross-encoder model."""
 
 import logging
+import threading
 
 from eduagent.config import Settings
 
@@ -25,12 +26,17 @@ class Reranker:
     def __init__(self, settings: Settings):
         self._cache_dir = str(settings.models_dir / "fastembed")
         self._encoder = None
+        self._lock = threading.Lock()
 
     def score(self, query: str, texts: list[str]) -> list[float]:
         """One score per text, in input order; higher means more relevant."""
         if not texts:
             return []
-        if self._encoder is None:
-            log.info("Loading reranker %s", self.MODEL)
-            self._encoder = _encoder_class()(self.MODEL, cache_dir=self._cache_dir)
-        return [float(s) for s in self._encoder.rerank(query, texts)]
+        encoder = self._encoder
+        if encoder is None:
+            with self._lock:  # two threads must not both load the model
+                if self._encoder is None:
+                    log.info("Loading reranker %s", self.MODEL)
+                    self._encoder = _encoder_class()(self.MODEL, cache_dir=self._cache_dir)
+                encoder = self._encoder
+        return [float(s) for s in encoder.rerank(query, texts)]

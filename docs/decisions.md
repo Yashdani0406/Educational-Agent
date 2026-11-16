@@ -401,3 +401,13 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* `RuntimeError` and `ConversionError` from Docling both become "This file couldn't be read…"; a failed model download becomes "Couldn't download the PDF reading models…". The `.ready` marker lists what was fetched (`base`, `formula`), so turning formula enrichment on later fetches only CodeFormula. Word files get the marker "[formula, see the original document]"; items spanning pages cite the full page range.
 *Rejected:* Letting Docling's RuntimeError escape, a marker that only says "done".
 *Why:* A bad file or a missing network must fail that one file with a reason, never crash the queue.
+
+## 2026-11-16 — Hybrid search: TM2C2 fusion, per-origin pipelines, relevance floor only moves slots
+*Chose:* Dense (Chroma) and keyword (FTS5) top 30 are fused per origin (module material, books) with TM2C2 at alpha 0.6 (cosine similarity normalised from -1, keyword score from 0; a candidate missing from one list scores 0 there), the fused top 30 of each origin are reranked separately, and the 10 results are split 70/30 by `allot_slots`. A chunk is relevant when its rerank score is at least `RERANK_RELEVANT_MIN = 0.0`; slots a group cannot fill with relevant chunks go to the other group, and slots the other group cannot take go back to whoever still has chunks, so the floor never empties results. With the reranker off, every found chunk counts as relevant and only an empty group gives slots away. Calibration (6 fixed questions, fixtures in `tests/kb/test_search_live.py`, printout in `tests/kb/search_calibration.md`): best answers scored 0.65 to 9.20, non-answers at most -1.69, so 0.0 separates them with margin on both sides. Total time per query was 450-550 ms on this CPU (embedding 40-150 ms, rerank 350-410 ms for 30+30 chunks).
+*Rejected:* A hard floor that drops low-scoring chunks (a weak but real match must still come back), RRF fusion (design 3.6), a floor below -2.2 (it would count adjacent but unhelpful slides as relevant).
+*Why:* Design 3.6: alpha 0.6 lets keyword-only hits into the shortlist; separate pipelines stop one book's hundreds of chunks from crowding out a week of slides; a floor that only moves slots keeps "a question only the book covers returns up to 10 book chunks" without ever returning nothing.
+
+## 2026-11-16 — The reranker loads its model under a lock
+*Chose:* `Reranker.score` loads the cross-encoder once behind a double-checked `threading.Lock`.
+*Rejected:* Loading in `__init__` (would make start-up slow and break the "import loads nothing" rule).
+*Why:* The tutor and the ingestion thread can both search; two simultaneous first calls must not load the model twice.
