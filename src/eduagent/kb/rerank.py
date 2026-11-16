@@ -18,6 +18,8 @@ def _encoder_class():
 
 
 class Reranker:
+    """Local cross-encoder. Precondition: `configure_model_dirs(settings)` must run before the first `score()`."""
+
     MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 
     def __init__(self, settings: Settings):

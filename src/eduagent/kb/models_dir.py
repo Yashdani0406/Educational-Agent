@@ -20,3 +20,4 @@ def configure_model_dirs(settings: Settings) -> None:
         if old and old != target:
             log.info("Overriding %s (%s) so models stay in %s", name, old, models)
         os.environ[name] = target
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # Windows without symlinks only costs a little disk

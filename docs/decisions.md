@@ -317,10 +317,10 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Rejected:* FlashRank; sentence-transformers (needs torch).
 *Why:* ONNX only, ships the exact MiniLM-L6 cross-encoder the design names, and its cache folder can be pointed at `data/models`.
 
-## 2026-11-16 — Embeddings use `truncate: false` plus a character cap
-*Chose:* Every `/api/embed` call sends `"truncate": false`, and the embedder refuses any text over 4,500 characters (about 1,500 tokens of prose) before sending. It never sends `num_ctx`, and sends `num_gpu: 0` unless `OLLAMA_USE_GPU` is on (R14).
-*Rejected:* Letting Ollama truncate; sending the Qwen options.
-*Why:* Silent truncation was measured on 2026-11-09 and would index only the start of a chunk. The laptop's 2 GB GPU crashed Ollama on CUDA init, and the limits were measured on CPU with the model's own 2048-token context.
+## 2026-11-16 — `truncate: false` + a 1,500-token cap counted with the model's tokenizer (R15)
+*Chose:* Every `/api/embed` call sends `"truncate": false`. The embedder counts the whole input (prefix + header + chunk) with nomic-embed-text's own `tokenizer.json` (`nomic-ai/nomic-embed-text-v1.5`, pinned revision, fetched once into `data/models/hf`, offline afterwards) and raises "A piece of text was too long for the embedding model." before sending if it exceeds `MAX_EMBED_TOKENS = 1500`. The count includes special tokens and equals Ollama's `prompt_eval_count` exactly. It never sends `num_ctx`, and sends `num_gpu: 0` unless `OLLAMA_USE_GPU` is on (R14).
+*Rejected:* A character cap (`MAX_EMBED_CHARS = 4500`); letting Ollama truncate; sending the Qwen options.
+*Why:* Silent truncation was measured on 2026-11-09 and would index only the start of a chunk. Characters per token vary too much for one cap to be both safe and roomy: prose runs at 5.1 chars/token (a 4,247-char fixture was 831 tokens), code at 2.2 (4,497 chars was 2,044 tokens, just under the limit), numeric tables and LaTeX at 1.7 (a 4,497-char input returned HTTP 400 `the input length exceeds the context length`). A real token count is safe for all of them. The laptop's 2 GB GPU crashed Ollama on CUDA init, and the limits were measured on CPU with the model's own 2048-token context.
 
 ## 2026-11-16 — `clustering:` prefix for topic-name similarity
 *Chose:* Topic names are embedded with nomic's `clustering: ` prefix (`embed_labels`), separate from `search_document: ` and `search_query: `.

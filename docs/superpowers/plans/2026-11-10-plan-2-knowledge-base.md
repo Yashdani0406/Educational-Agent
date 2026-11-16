@@ -378,6 +378,8 @@ class Reranker:
 
 Embedder errors: connection error → `EmbedError("Ollama isn't running. Start it with: ollama serve")`; HTTP 400 mentioning context/length → `EmbedError("A piece of text was too long for the embedding model.")`; any input over `MAX_EMBED_CHARS` → raises before sending.
 
+**Changed 2026-11-16 (R15):** `MAX_EMBED_CHARS` is replaced by `MAX_EMBED_TOKENS = 1500`, a real token count of the whole embedding input (prefix + header + chunk) made with nomic-embed-text's own tokenizer (`TokenCounter(settings)`, callable as `count(text) -> int`; `Embedder(settings, transport=None, counter=None)`). Over-cap input raises before sending; the 400 case is matched on "context length".
+
 - [ ] **Step 1: Write failing tests** (`httpx.MockTransport`): `test_prefixes_and_truncate_false` (request JSON has `"truncate": false`, inputs start with the right prefix, model = `nomic-embed-text`); `test_batches_of_eight` (20 texts → 3 requests, order kept); `test_overlong_input_raises_clear_error` (4,501 chars → `EmbedError`, no request sent; a 400 response → the "too long" message); `test_ollama_down_message`. Reranker: `test_reranker_uses_models_dir` (fake `TextCrossEncoder` class injected via monkeypatch receives `cache_dir` under `models_dir`), `test_score_order_kept`.
 - [ ] **Step 2–4:** fail → implement → pass.
 - [ ] **Step 5: Live check:** `@pytest.mark.ollama` `test_live_embed_dims` (768 floats; a 1,400-token prose input passes); `@pytest.mark.models` `test_live_rerank_prefers_relevant` ("what is the gini index" scores a Gini paragraph above a k-means paragraph) and the model files appear under `data/models/fastembed`. Run both, paste output.
@@ -421,7 +423,7 @@ def normalise_text(text: str) -> str                    # for hashing pasted tex
 
 **Files:** Create `kb/chunker.py`, `tests/kb/test_chunker.py`.
 
-**Interfaces — Consumes:** `Block`, `ChunkDraft`, `split_sentences`, `word_count`, `MAX_EMBED_CHARS`. **Produces:**
+**Interfaces — Consumes:** `Block`, `ChunkDraft`, `split_sentences`, `word_count`, `MAX_EMBED_TOKENS`. **Produces:**
 
 ```python
 SLIDE_MIN_WORDS = 25
@@ -431,6 +433,8 @@ def chunk_blocks(blocks: list[Block], layout: Layout, *, carry_headings: list[st
     # returns drafts and the heading path still open at the end (carried into the next piece)
 def embedding_text(file_title: str, chunk: ChunkDraft) -> str   # f"search_document: {file_title} > {heading_path}\n\n{text}" (no " > " part when heading_path is empty)
 ```
+
+**Changed 2026-11-16 (R15):** the chunker is given a `count_tokens: Callable[[str], int]` (the Task 8 `TokenCounter`) and `MAX_EMBED_TOKENS` instead of `MAX_EMBED_CHARS`: every `embedding_text(title, c)` (prefix included) must count ≤ `MAX_EMBED_TOKENS`, and over-cap blocks are split by lines. `test_embedding_text_never_exceeds_cap` uses a fake counter.
 
 Rules (design §3.4): `slides` — one chunk per slide (`loc`), heading path = first heading on the slide, `notes` blocks appended as `"\n\nSpeaker notes: …"`, slides under 25 words merged into the next (the last one into the previous), `loc_kind="slide"`, range kept. `document` — one chunk per heading section, long sections split at 450–550 words on sentence boundaries, hard max 800, 2-sentence overlap, `loc_kind="page"` with page range, heading path `"A > B"`. `docx` — one chunk per heading, whole document as one chunk if under 800 words, sections over 800 split as `document` without overlap, `loc_kind="heading"`. `text` — sentence-aligned 400–500 words with ~15% overlap (whole sentences), `loc_kind="line"` from block line ranges. `markdown` (MD and web snapshots) — heading sections first, then `text` rules inside each, `loc_kind="line"` for MD, `"heading"` for web (the Ingestor passes the right one by layout). Everywhere: never cut mid-sentence; a table, code or formula block is never split unless it alone exceeds 800 words or its `embedding_text` exceeds `MAX_EMBED_CHARS`, then it's split by lines.
 
