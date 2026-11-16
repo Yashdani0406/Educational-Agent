@@ -95,3 +95,54 @@ def make_image_table_pdf(path: Path, rows: list[list[str]]) -> Path:
     c.save()
     png.unlink()
     return path
+
+
+def break_zip_member(path: Path, member: str) -> Path:
+    """Rewrite an Office file with one XML part cut in half, as a damaged download would be."""
+    import zipfile
+
+    with zipfile.ZipFile(path) as zin:
+        parts = {n: zin.read(n) for n in zin.namelist()}
+    parts[member] = parts[member][: len(parts[member]) // 2]
+    with zipfile.ZipFile(path, "w") as zout:
+        for name, data in parts.items():
+            zout.writestr(name, data)
+    return path
+
+
+def make_empty_pptx(path: Path) -> Path:
+    Presentation().save(str(path))
+    return path
+
+
+def make_equation_pdf(path: Path) -> Path | None:
+    """A page with a typeset-looking display equation drawn as a picture (Docling's layout model sees it as a formula).
+
+    Needs the Windows Cambria font for the math symbols; returns None where it is missing.
+    """
+    try:
+        big = ImageFont.truetype("C:/Windows/Fonts/cambria.ttc", 70, index=1)
+        small = ImageFont.truetype("C:/Windows/Fonts/cambria.ttc", 44, index=1)
+    except OSError:
+        return None
+    img = Image.new("RGB", (1500, 330), "white")
+    draw = ImageDraw.Draw(img)
+    draw.text((60, 110), "G(t) = 1 \u2212", font=big, fill="black")
+    draw.text((520, 40), "\u2211\u1d62 p\u1d62\u00b2", font=big, fill="black")
+    draw.line([(500, 165), (860, 165)], fill="black", width=4)
+    draw.text((560, 185), "N(t) + 1", font=big, fill="black")
+    draw.text((930, 110), "= \u221a(x\u00b2 + y\u00b2)", font=big, fill="black")
+    draw.text((1350, 120), "(1)", font=small, fill="black")
+    png = path.with_suffix(".png")
+    img.save(png)
+    c = canvas.Canvas(str(path), pagesize=A4)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(60, 770, "Impurity")
+    c.setFont("Helvetica", 11)
+    c.drawString(60, 740, "The impurity of a node is given by the equation below, where p is the class share.")
+    c.drawImage(str(png), 60, 540, width=480, height=480 * 330 / 1500)
+    c.drawString(60, 500, "Here N is the number of samples in the node.")
+    c.showPage()
+    c.save()
+    png.unlink()
+    return path

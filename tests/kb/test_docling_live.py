@@ -4,7 +4,7 @@ import time
 
 import pytest
 from docling.models.stages.ocr.rapid_ocr_model import RapidOcrModel
-from fixtures import make_image_table_pdf, make_pdf
+from kb_fixtures import make_equation_pdf, make_image_table_pdf, make_pdf
 
 from eduagent.config import Settings
 from eduagent.kb.docling_parser import DoclingParser
@@ -72,13 +72,15 @@ def test_page_range_piece(parser, tmp_path):
     assert {b.text for b in blocks if b.kind == "heading"} == {f"Page {n}" for n in range(26, 31)}
 
 
-def test_formula_page_timing(parser, tmp_path):
-    pdf = make_pdf(
-        tmp_path / "math.pdf",
-        ["Impurity\nThe Gini impurity of a node is given by the formula below.\n\nG = 1 - sum_i (p_i)^2\n\nWhere p_i is the share of class i in the node."],
-    )
+def test_formula_page_is_decoded(parser, tmp_path):
+    pdf = make_equation_pdf(tmp_path / "math.pdf")
+    if pdf is None:
+        pytest.skip("needs the Windows Cambria font to draw the equation")
+    parser.convert(pdf, "pdf")  # warm up, so the figure below is the steady-state cost
     start = time.perf_counter()
     blocks = parser.convert(pdf, "pdf")
-    print(f"\nLIVE formula page: {time.perf_counter() - start:.1f} s")
-    print("LIVE formula page blocks:", [(b.kind, b.text[:80]) for b in blocks])
-    assert blocks
+    print(f"\nLIVE formula page: {time.perf_counter() - start:.1f} s/page")
+    print("LIVE formula blocks:", [(b.kind, b.text[:100]) for b in blocks])
+    formulas = [b for b in blocks if b.kind == "formula"]
+    assert formulas and formulas[0].loc == 1
+    assert "\\frac" in formulas[0].text or formulas[0].text == "[formula, see page 1]"

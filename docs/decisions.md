@@ -396,3 +396,8 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* A PDF whose pages are mostly landscape is laid out as "slides", otherwise "document". pypdfium2 does the page count, orientation, text-layer check, password and not-a-PDF checks (plain-English `IngestError`) before the slow Docling run, in 25-page ranges.
 *Rejected:* Sending every file to Docling first and failing there.
 *Why:* A locked, fake or scanned file should fail in milliseconds with a reason the student can act on.
+
+## 2026-11-16 — Docling failures become plain reasons; model marker records what was fetched
+*Chose:* `RuntimeError` and `ConversionError` from Docling both become "This file couldn't be read…"; a failed model download becomes "Couldn't download the PDF reading models…". The `.ready` marker lists what was fetched (`base`, `formula`), so turning formula enrichment on later fetches only CodeFormula. Word files get the marker "[formula, see the original document]"; items spanning pages cite the full page range.
+*Rejected:* Letting Docling's RuntimeError escape, a marker that only says "done".
+*Why:* A bad file or a missing network must fail that one file with a reason, never crash the queue.

@@ -47,3 +47,10 @@ markers = [
     "ollama: needs a running local Ollama with the Qwen model (run with -m ollama)",
     "models: downloads or runs Docling PDF models or the reranker (run with -m models)",
 ]
+# Deprecations raised inside Docling and transformers themselves (not our code); each is narrowed to its own message.
+filterwarnings = [
+    "ignore:`force_full_page_ocr` is deprecated:DeprecationWarning",
+    "ignore:This field is deprecated. Use `generate_page_images:DeprecationWarning",
+    "ignore:deprecated:DeprecationWarning:docling.models.stages.ocr.rapid_ocr_model",
+    "ignore:`rope_scaling` is deprecated:FutureWarning",
+]

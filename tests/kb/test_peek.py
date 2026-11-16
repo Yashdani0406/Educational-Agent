@@ -2,7 +2,9 @@ import pytest
 
 from eduagent.kb.peek import PIECE_PAGES, PeekInfo, peek, plan_pdf
 from eduagent.kb.types import IngestError
-from fixtures import make_encrypted_pdf, make_image_only_pdf, make_pdf, make_pptx
+from kb_fixtures import (
+    break_zip_member, make_docx, make_empty_pptx, make_encrypted_pdf, make_image_only_pdf, make_pdf, make_pptx,
+)
 
 NO_TEXT = (
     "This PDF has no text layer (it looks like a scan). Scanned documents aren't supported; "
@@ -63,8 +65,6 @@ def test_peek_limits_words(tmp_path):
 
 
 def test_peek_docx_and_pdf(tmp_path):
-    from fixtures import make_docx
-
     docx = make_docx(tmp_path / "n.docx", [(1, "Ensembles"), (0, "Models combine.")])
     assert peek(docx, "docx").text.startswith("Ensembles")
     pdf = make_pdf(tmp_path / "b.pdf", ["Chapter one\nreal words"] * 2)
@@ -72,17 +72,40 @@ def test_peek_docx_and_pdf(tmp_path):
     assert info.text.startswith("Chapter one") and info.pages == 2 and info.landscape is False
 
 
+def fails_with(call, message):
+    with pytest.raises(IngestError) as e:
+        call()
+    assert e.value.user_message == message
+
+
+EMPTY = "This file is empty."
+BAD_PPTX = "This file isn't a readable PowerPoint presentation. Try opening and re-saving it as .pptx, then upload it again."
+BAD_DOCX = "This file isn't a readable Word document. Try opening and re-saving it as .docx, then upload it again."
+
+
 @pytest.mark.parametrize("kind", ["pptx", "docx", "pdf", "txt"])
 def test_empty_file_is_rejected(tmp_path, kind):
     path = tmp_path / f"empty.{kind}"
     path.write_bytes(b"")
-    with pytest.raises(IngestError):
-        peek(path, kind)
+    fails_with(lambda: peek(path, kind), EMPTY)
 
 
-@pytest.mark.parametrize("kind", ["pptx", "docx"])
-def test_not_really_office_file(tmp_path, kind):
+@pytest.mark.parametrize("kind,message", [("pptx", BAD_PPTX), ("docx", BAD_DOCX)])
+def test_not_really_office_file(tmp_path, kind, message):
     path = tmp_path / f"fake.{kind}"
     path.write_bytes(b"<html>nope</html>")
-    with pytest.raises(IngestError):
-        peek(path, kind)
+    fails_with(lambda: peek(path, kind), message)
+
+
+def test_truncated_docx_xml(tmp_path):
+    path = break_zip_member(make_docx(tmp_path / "d.docx", [(1, "Title"), (0, "Some body text here.")]), "word/document.xml")
+    fails_with(lambda: peek(path, "docx"), BAD_DOCX)
+
+
+def test_truncated_pptx_xml(tmp_path):
+    path = break_zip_member(make_pptx(tmp_path / "p.pptx", [("Title", "Body words", "")]), "ppt/slides/slide1.xml")
+    fails_with(lambda: peek(path, "pptx"), BAD_PPTX)
+
+
+def test_pptx_with_no_slides(tmp_path):
+    fails_with(lambda: peek(make_empty_pptx(tmp_path / "none.pptx"), "pptx"), "This presentation has no slides.")

@@ -1,4 +1,5 @@
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -8,7 +9,7 @@ from eduagent.kb.models_dir import configure_model_dirs
 
 # huggingface_hub reads HF_HOME once at import and some test modules import model libraries at
 # collection, so point downloads at data/models first (nothing may go to C:/Users/...).
-configure_model_dirs(Settings(_env_file=None))
+configure_model_dirs(Settings(_env_file=None, models_dir=Path(__file__).resolve().parents[2] / "data" / "models"))
 
 
 def free_port() -> int:

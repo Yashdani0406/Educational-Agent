@@ -1,11 +1,14 @@
+import json
+
 import pytest
+from docling.exceptions import ConversionError
 from docling_core.types.doc import BoundingBox, DocItemLabel, DoclingDocument, ProvenanceItem, TableCell, TableData
 from docling_core.types.doc.document import ContentLayer
 
 from eduagent.config import Settings
 from eduagent.kb.docling_parser import FORMULA_MARKER, DoclingParser, docling_blocks
-from eduagent.kb.types import Block
-from fixtures import make_docx, make_pptx
+from eduagent.kb.types import Block, IngestError
+from kb_fixtures import make_docx, make_pptx
 
 
 @pytest.fixture(autouse=True)
@@ -80,3 +83,77 @@ def test_docx_real_docling(tmp_path):
         ("heading", 1, "Ensembles"), ("heading", 2, "Bagging"),
     ]
     assert [b.text for b in blocks if b.kind == "text"] == ["Ensembles combine models.", "Bagging averages many trees."]
+
+
+def test_item_spanning_pages_cites_the_whole_range():
+    doc = DoclingDocument(name="t")
+    item = doc.add_text(DocItemLabel.TEXT, "A paragraph that runs over the page break.", prov=prov(3))
+    item.prov.append(prov(4))
+    assert docling_blocks(doc, where="page") == [
+        Block("A paragraph that runs over the page break.", "text", loc=3, loc_end=4)
+    ]
+
+
+def test_docx_formula_marker_has_no_page_number():
+    doc = DoclingDocument(name="t")
+    doc.add_formula("")
+    doc.add_formula("<!-- formula-not-decoded -->")
+    texts = [b.text for b in docling_blocks(doc, where="document")]
+    assert texts == ["[formula, see the original document]"] * 2
+
+
+UNREADABLE = "This file couldn't be read. Try opening and re-saving it, then upload it again."
+
+
+class RaisingConverter:
+    def __init__(self, error):
+        self.error = error
+
+    def convert(self, *args, **kwargs):
+        raise self.error
+
+
+@pytest.mark.parametrize("error", [RuntimeError("Pipeline SimplePipeline failed"), ConversionError("bad file")])
+def test_docling_failures_become_plain_reasons(tmp_path, error):
+    parser = DoclingParser(Settings(_env_file=None, models_dir=tmp_path / "m"))
+    parser._converter = RaisingConverter(error)
+    with pytest.raises(IngestError) as e:
+        parser.convert(tmp_path / "x.pptx", "pptx")
+    assert e.value.user_message == UNREADABLE
+
+
+def fake_downloads(monkeypatch, calls, fail=False):
+    def fake(folder, **kwargs):
+        if fail:
+            raise OSError("offline")
+        calls.append(kwargs)
+
+    monkeypatch.setattr("docling.utils.model_downloader.download_models", fake)
+
+
+def test_models_marker_records_what_was_fetched(tmp_path, monkeypatch):
+    calls = []
+    fake_downloads(monkeypatch, calls)
+    off = Settings(_env_file=None, models_dir=tmp_path / "m", formula_enrichment=False)
+    DoclingParser(off)._ensure_models()
+    assert [c["with_code_formula"] for c in calls] == [False] and calls[0]["with_layout"]
+    DoclingParser(off)._ensure_models()
+    assert len(calls) == 1  # nothing missing, no network
+    on = Settings(_env_file=None, models_dir=tmp_path / "m", formula_enrichment=True)
+    DoclingParser(on)._ensure_models()
+    assert len(calls) == 2
+    assert calls[1]["with_code_formula"] and not calls[1]["with_layout"] and not calls[1]["with_rapidocr"]
+    assert set(json.loads((tmp_path / "m" / "docling" / ".ready").read_text())) == {"base", "formula"}
+    DoclingParser(on)._ensure_models()
+    assert len(calls) == 2
+
+
+def test_failed_download_is_a_plain_reason_and_not_marked(tmp_path, monkeypatch):
+    fake_downloads(monkeypatch, [], fail=True)
+    parser = DoclingParser(Settings(_env_file=None, models_dir=tmp_path / "m"))
+    with pytest.raises(IngestError) as e:
+        parser._ensure_models()
+    assert e.value.user_message == (
+        "Couldn't download the PDF reading models. Check the internet connection and retry this file."
+    )
+    assert not (tmp_path / "m" / "docling" / ".ready").exists()

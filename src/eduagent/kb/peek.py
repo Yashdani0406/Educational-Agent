@@ -5,6 +5,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from lxml import etree
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
 
@@ -71,6 +72,8 @@ def _pdf_scan(path: Path) -> tuple[int, bool, str]:
         if len("".join(text.split())) <= _MIN_TEXT_CHARS:
             raise IngestError(_NO_TEXT)
         return count, wide * 2 > count, text
+    except pdfium.PdfiumError as e:
+        raise IngestError(_BAD_PDF) from e
     finally:
         pdf.close()
 
@@ -88,7 +91,7 @@ def _peek_pptx(path: Path) -> PeekInfo:
 
     try:
         prs = Presentation(str(path))
-    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError) as e:
+    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, etree.LxmlError, SyntaxError) as e:
         raise IngestError(_BAD_OFFICE["pptx"]) from e
     if len(prs.slides) == 0:
         raise IngestError("This presentation has no slides.")
@@ -111,7 +114,7 @@ def _peek_docx(path: Path) -> PeekInfo:
 
     try:
         doc = Document(str(path))
-    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError) as e:
+    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, etree.LxmlError, SyntaxError) as e:
         raise IngestError(_BAD_OFFICE["docx"]) from e
     text = _first_words(" ".join(p.text for p in doc.paragraphs))
     if not text:
@@ -128,10 +131,11 @@ def peek(path: Path, kind: FileKind) -> PeekInfo:
     if kind == "pdf":
         count, landscape, text = _pdf_scan(path)
         return PeekInfo(_first_words(text), count, landscape)
-    if kind == "pptx":
-        return _peek_pptx(path)
-    if kind == "docx":
-        return _peek_docx(path)
+    if kind in ("pptx", "docx"):
+        try:
+            return _peek_pptx(path) if kind == "pptx" else _peek_docx(path)
+        except (etree.LxmlError, SyntaxError) as e:  # parts are parsed lazily, so a broken slide shows up here
+            raise IngestError(_BAD_OFFICE[kind]) from e
     text = _first_words(path.read_text(encoding="utf-8", errors="replace"))
     if not text:
         raise IngestError(_EMPTY)
