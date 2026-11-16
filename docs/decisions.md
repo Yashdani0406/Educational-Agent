@@ -351,3 +351,33 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* A single newline before a bullet (`-`, `*`, `•`) is always a sentence boundary. A single newline before a numbered marker (1–2 digits then `.` or `)`) is a boundary only when the previous line ends with `.`, `?`, `!` (plus closers) or `:`, or itself starts with a list marker. The "line-leading number is not a sentence end" protection applies to 1–2-digit numbers only, so a year like `1986.` still ends a sentence. This replaces the numbered-list part of R16.
 *Rejected:* Cutting before every line that starts with a number.
 *Why:* Hard-wrapped text often wraps right before a number ("The answer was\n42. Then..."); cutting there splits a sentence in half. Under-splitting is safe, mid-sentence cuts are not. The splitter also looks back over a bounded window only, so a transcript pasted on one line splits in linear time.
+
+## 2026-11-16 — Chunk sizes at the low end of 500–800 words
+*Chose:* Sections are cut at 450–550 words (hard maximum 800, 2-sentence overlap), text windows at 400–500 words with about 15% whole-sentence overlap, slides one per chunk with slides under 25 words merged.
+*Rejected:* The 500–800-word middle of the spec's range, and fixed-size windows everywhere.
+*Why:* Chroma (2024) and NVIDIA (2025) studies favour about 250–500 tokens for factual questions, and section-following chunks beat fixed windows slightly but consistently (Kuehlkamp 2026).
+
+## 2026-11-16 — Heading path goes into the embedding text only
+*Chose:* Heading blocks feed `heading_path` and are not repeated in the chunk text; `embedding_text` adds `title > heading path` in front. The Ingestor passes `embedding_body` (the same without the prefix) to the embedder, which adds `search_document: ` itself (R21).
+*Rejected:* Storing the heading inside the chunk text, or adding the prefix in two places.
+*Why:* Stored and shown text stays the exact quotable source, the keyword index has its own heading column, and the document prefix is applied exactly once.
+
+## 2026-11-16 — Overlap only where boundaries are arbitrary
+*Chose:* Overlap in section-split documents and text windows only. Slides and DOCX sections get none.
+*Rejected:* Overlap everywhere.
+*Why:* A slide or a heading section is already a natural unit; overlap only helps where we cut inside running prose, and with a strong embedding model it added little.
+
+## 2026-11-16 — Heading levels are kept across pieces (R20)
+*Chose:* Carried and returned open paths are `(level, text)` pairs; a heading of level L drops every open entry of level L or deeper, then is pushed. Slides use the first heading on the slide, no stack. Lists from the JSON round trip are accepted.
+*Rejected:* Carrying bare heading texts.
+*Why:* Without levels, a new heading cannot tell which carried headings it closes, so a piece starting mid-chapter would give wrong paths.
+
+## 2026-11-16 — The only cuts that are not at a sentence end (R21/R22)
+*Chose:* Cuts mid-sentence happen only when a "sentence" is over the layout's word maximum (split at word boundaries into window-sized pieces) or when a table, code or formula block is over the cap or 800 words (split by lines, then whitespace, then characters). The cap is the whole embedding text in tokens, title and heading path included, for every layout; slides over the cap are split by lines and keep their slide number.
+*Rejected:* Letting an oversize block through, or truncating at embedding time.
+*Why:* Ollama rejects inputs over the context with HTTP 400 (truncation is off), and a transcript without punctuation or a wide table must still be searchable and finish ingesting.
+
+## 2026-11-16 — Slide merging and locations
+*Chose:* Short slides merge forward until the chunk has 25 words (speaker notes count), the last short group merges back, and a merge that would pass the cap is skipped. Locations are the min/max of the contributing blocks; text and Markdown count lines per sentence, so a window cites only its own lines; web and DOCX pass block locations through.
+*Rejected:* Citing the whole block for every window.
+*Why:* A citation should point at the lines the chunk actually contains.

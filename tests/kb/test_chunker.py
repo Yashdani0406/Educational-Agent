@@ -1,0 +1,319 @@
+import pytest
+
+from eduagent.kb.chunker import chunk_blocks, embedding_body, embedding_text
+from eduagent.kb.embed import DOCUMENT_PREFIX, MAX_EMBED_TOKENS
+from eduagent.kb.sentences import split_sentences, word_count
+from eduagent.kb.types import Block, ChunkDraft
+
+by_words = lambda s: len(s.split())  # noqa: E731
+by_chars = lambda s: len(s) // 3  # noqa: E731  (a code-like counter: characters cost tokens)
+
+LAYOUTS = ["slides", "document", "docx", "text", "markdown", "web"]
+
+
+def gen(start: int, n: int, per: int = 14) -> str:
+    """n unique words (w<start>...), a full stop after every `per` words and at the end."""
+    words = []
+    for i in range(n):
+        w = f"w{start + i}"
+        if (i + 1) % per == 0 or i == n - 1:
+            w += "."
+        words.append(w)
+    return " ".join(words)
+
+
+def run(blocks, layout="document", counter=by_words, **kw):
+    return chunk_blocks(blocks, layout, file_title="Trees.pdf", count_tokens=counter, **kw)
+
+
+def slide(n, title, words, notes=None, start=0):
+    blocks = [Block(title, "heading", 1, loc=n), Block(gen(start, words, 10), "text", loc=n)]
+    if notes:
+        blocks.append(Block(notes, "notes", loc=n))
+    return blocks
+
+
+# ---------- slides ----------
+
+def test_one_chunk_per_slide_with_notes():
+    blocks = slide(1, "Gini", 30) + slide(2, "Entropy", 40, notes="Say this slowly.", start=100)
+    chunks, open_path = run(blocks, "slides")
+    assert [(c.heading_path, c.loc_kind, c.loc_start, c.loc_end) for c in chunks] == [
+        ("Gini", "slide", 1, 1), ("Entropy", "slide", 2, 2)]
+    assert chunks[1].text.endswith("\n\nSpeaker notes: Say this slowly.")
+    assert "Speaker notes" not in chunks[0].text
+    assert chunks[1].word_count == 40 + 5  # notes count
+    assert open_path == []
+
+
+def test_slide_heading_is_first_heading_without_stack_or_carry():
+    blocks = [Block("Top", "heading", 1, loc=1), Block("Sub", "heading", 2, loc=1), Block(gen(0, 30), "text", loc=1)]
+    chunks, open_path = run(blocks, "slides", carry_headings=[(1, "Ignored")])
+    assert chunks[0].heading_path == "Top"
+    assert open_path == []
+
+
+def test_short_slides_merge_into_next():
+    blocks = slide(1, "A", 30) + slide(2, "B", 30, start=50) + slide(3, "C", 8, start=100) + slide(4, "D", 30, start=200)
+    chunks, _ = run(blocks, "slides")
+    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 1), (2, 2), (3, 4)]
+    assert chunks[2].heading_path == "C"
+    assert "w100" in chunks[2].text and "w200" in chunks[2].text
+
+
+def test_short_slides_keep_merging_until_25_words():
+    blocks = sum((slide(n, f"S{n}", 8, start=n * 10) for n in range(1, 5)), []) + slide(5, "S5", 40, start=500)
+    chunks, _ = run(blocks, "slides")
+    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 4), (5, 5)]  # 8+8+8 = 24 < 25, so slide 4 joins too
+
+
+def test_last_short_slide_merges_into_previous():
+    blocks = slide(1, "A", 30) + slide(2, "B", 30, start=50) + slide(3, "C", 5, start=100)
+    chunks, _ = run(blocks, "slides")
+    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 1), (2, 3)]
+    assert chunks[1].heading_path == "B"
+
+
+def test_slide_merge_skipped_when_it_would_pass_the_cap():
+    blocks = slide(1, "A", 1, start=0) + slide(2, "B", 1, start=10)  # two 1-word slides
+    chunks, _ = run(blocks, "slides", counter=lambda s: 800 * s.count("w"))  # one slide fits, both together do not
+    assert [(c.loc_start, c.loc_end) for c in chunks] == [(1, 1), (2, 2)]
+
+
+def test_slide_over_the_cap_is_split_and_keeps_its_number():
+    table = "\n".join(f"row{i} | " + "x" * 200 for i in range(100))
+    blocks = [Block("Big", "heading", 1, loc=7), Block(table, "table", loc=7)]
+    chunks, _ = run(blocks, "slides", counter=by_chars)
+    assert len(chunks) > 1
+    assert all((c.loc_start, c.loc_end, c.heading_path) == (7, 7, "Big") for c in chunks)
+    assert "\n".join(c.text for c in chunks) == table
+
+
+# ---------- document / sections ----------
+
+def test_document_sections_split_with_overlap():
+    paras = [Block(gen(i * 70, 70), "text", loc=3 + i // 4) for i in range(1300 // 70 + 1)]
+    blocks = [Block("Ch 1", "heading", 1, loc=3)] + paras
+    chunks, _ = run(blocks, "document")
+    assert len(chunks) >= 3
+    assert all(c.loc_kind == "page" and c.heading_path == "Ch 1" for c in chunks)
+    for c in chunks[:-1]:
+        assert 450 <= c.word_count <= 550
+    assert all(c.word_count <= 800 for c in chunks)
+    for prev, nxt in zip(chunks, chunks[1:]):
+        assert split_sentences(nxt.text)[:2] == split_sentences(prev.text)[-2:]
+        assert nxt.loc_start <= prev.loc_end
+    assert chunks[0].loc_start == 3 and chunks[-1].loc_end == paras[-1].loc
+    assert [c.loc_start for c in chunks] == sorted(c.loc_start for c in chunks)
+
+
+def test_long_single_sentence_may_carry_a_chunk_to_800():
+    blocks = [Block(gen(0, 20, 10), "text", loc=1), Block(" ".join(f"x{i}" for i in range(700)) + ".", "text", loc=1)]
+    chunks, _ = run(blocks, "document")
+    assert max(c.word_count for c in chunks) <= 800
+    assert any(c.word_count > 550 for c in chunks)
+
+
+def test_empty_section_makes_no_chunk():
+    blocks = [Block("A", "heading", 1), Block("B", "heading", 1), Block(gen(0, 30), "text", loc=2)]
+    chunks, open_path = run(blocks, "document")
+    assert [c.heading_path for c in chunks] == ["B"]
+    assert open_path == [(1, "B")]
+
+
+def test_table_not_split():
+    table = "\n".join(f"r{i} | " + " ".join(f"c{i}x{j}" for j in range(8)) for i in range(30))  # 300 words
+    assert word_count(table) == 300
+    blocks = [Block("S", "heading", 1), Block(gen(0, 100), "text", loc=1), Block(table, "table", loc=1),
+              Block(gen(500, 100), "text", loc=2)]
+    chunks, _ = run(blocks, "document")
+    assert sum(table in c.text for c in chunks) == 1
+
+
+def test_never_mid_sentence():
+    for layout in ("document", "markdown", "text", "docx"):
+        blocks = [Block("H", "heading", 1), Block(gen(0, 2000, 13), "text", loc=1, loc_end=1)]
+        chunks, _ = run(blocks, layout)
+        assert len(chunks) > 1
+        assert all(c.text.rstrip().endswith(".") for c in chunks), layout
+
+
+def test_unpunctuated_transcript_is_cut_at_words_and_loses_nothing():
+    text = " ".join(f"u{i}" for i in range(3000))
+    chunks, _ = run([Block(text, "text", loc=1, loc_end=1)], "text")
+    assert max(c.word_count for c in chunks) <= 500
+    assert " ".join(c.text for c in chunks).split() == text.split()
+
+
+# ---------- the embedding cap ----------
+
+def test_embedding_text_never_exceeds_cap():
+    code = "\n".join(f"{i:02d} " + "x" * 3000 for i in range(20))
+    long_line = "y" * 20000  # no whitespace at all
+    long_words = " ".join(f"{'abcdefghij'}{i:03d}" for i in range(1200)) + "."
+    table = "\n".join(f"row{i} | " + "z" * 200 for i in range(100))
+    cases = [
+        ("document", [Block("H", "heading", 1), Block(code, "code", loc=1)]),
+        ("document", [Block(long_line, "code", loc=1)]),
+        ("document", [Block("H", "heading", 1), Block(long_words, "text", loc=1)]),
+        ("slides", [Block("T", "heading", 1, loc=1), Block(table, "table", loc=1)]),
+        ("text", [Block(long_words, "text", loc=1, loc_end=1)]),
+        ("markdown", [Block("H", "heading", 1), Block(code, "code", loc=1, loc_end=20)]),
+        ("docx", [Block("H", "heading", 1), Block(table, "table")]),
+    ]
+    for layout, blocks in cases:
+        chunks, _ = run(blocks, layout, counter=by_chars)
+        assert chunks, layout
+        for c in chunks:
+            assert by_chars(embedding_text("Trees.pdf", c)) <= MAX_EMBED_TOKENS, layout
+    chunks, _ = run([Block("H", "heading", 1), Block(code, "code", loc=1)], "document", counter=by_chars)
+    assert len(chunks) >= 20
+    assert "".join(c.text for c in chunks).replace("\n", "") == code.replace("\n", "")
+
+
+# ---------- docx ----------
+
+def test_docx_small_doc_one_chunk():
+    blocks = [Block("Intro", "heading", 1), Block(gen(0, 200), "text"), Block("Part", "heading", 2),
+              Block(gen(300, 200), "text")]
+    chunks, _ = run(blocks, "docx")
+    assert len(chunks) == 1
+    assert (chunks[0].heading_path, chunks[0].loc_kind, chunks[0].loc_start) == ("", "heading", None)
+    assert "w0 " in chunks[0].text and "w499" in chunks[0].text
+
+
+def test_docx_one_chunk_per_heading_when_large():
+    blocks = []
+    for k, name in enumerate("ABC"):
+        blocks += [Block(name, "heading", 1), Block(gen(k * 1000, 400), "text")]
+    chunks, _ = run(blocks, "docx")
+    assert [c.heading_path for c in chunks] == ["A", "B", "C"]
+
+
+def test_docx_section_over_800_split_without_overlap():
+    blocks = [Block("A", "heading", 1), Block(gen(0, 1300), "text"), Block("B", "heading", 1), Block(gen(2000, 900), "text")]
+    chunks, _ = run(blocks, "docx")
+    assert len(chunks) >= 4
+    seen: set[str] = set()
+    for c in chunks:
+        words = set(c.text.split())
+        assert not words & seen
+        seen |= words
+
+
+# ---------- text / markdown / web ----------
+
+def test_text_windows_overlap_15_percent():
+    lines = [gen(i * 14, 14) for i in range(143)]  # one sentence per line, 2002 words
+    block = Block("\n".join(lines), "text", loc=1, loc_end=143)
+    chunks, _ = run([block], "text")
+    assert len(chunks) >= 4
+    assert all(c.loc_kind == "line" for c in chunks)
+    for c in chunks[:-1]:
+        assert 400 <= c.word_count <= 500
+    for prev, nxt in zip(chunks, chunks[1:]):
+        a, b = prev.text.split(), nxt.text.split()
+        shared = len(set(a) & set(b))
+        assert 50 <= shared <= 90
+        assert b[:shared] == a[-shared:]
+        assert nxt.loc_start <= prev.loc_end and nxt.loc_end > prev.loc_end and nxt.loc_start > prev.loc_start
+    assert chunks[0].loc_start == 1 and chunks[0].loc_end < 143  # only the lines it covers
+    assert chunks[-1].loc_end == 143
+
+
+def test_markdown_sections_then_windows_with_line_kind():
+    blocks = [Block("One", "heading", 1, loc=1), Block(gen(0, 50), "text", loc=2, loc_end=4),
+              Block("Two", "heading", 1, loc=6), Block(gen(100, 50), "text", loc=7, loc_end=9)]
+    chunks, _ = run(blocks, "markdown")
+    assert [(c.heading_path, c.loc_kind, c.loc_start, c.loc_end) for c in chunks] == [
+        ("One", "line", 2, 2), ("Two", "line", 7, 7)]
+
+
+def test_web_passes_block_locations_through():
+    blocks = [Block("Sec", "heading", 1, loc=3), Block(gen(0, 50), "text", loc=5, loc_end=9)]
+    (c,), _ = run(blocks, "web")
+    assert (c.loc_kind, c.loc_start, c.loc_end, c.heading_path) == ("heading", 5, 9, "Sec")
+
+
+def test_notes_outside_slides_are_plain_text():
+    chunks, _ = run([Block(gen(0, 30), "text", loc=1), Block("Remember this.", "notes", loc=2)], "document")
+    assert "Speaker notes" not in chunks[0].text and "Remember this." in chunks[0].text
+
+
+# ---------- headings across pieces ----------
+
+def test_carry_headings_across_pieces():
+    piece1 = [Block("Ch 3", "heading", 1, loc=1), Block("3.1 Gini", "heading", 2, loc=1), Block(gen(0, 60), "text", loc=1)]
+    chunks, open_path = run(piece1)
+    assert chunks[0].heading_path == "Ch 3 > 3.1 Gini"
+    assert open_path == [(1, "Ch 3"), (2, "3.1 Gini")]
+
+    piece2 = [Block(gen(100, 60), "text", loc=26), Block("3.2 Entropy", "heading", 2, loc=27), Block(gen(200, 60), "text", loc=27)]
+    chunks, open_path = run(piece2, carry_headings=open_path, first_seq=len(chunks))
+    assert [c.heading_path for c in chunks] == ["Ch 3 > 3.1 Gini", "Ch 3 > 3.2 Entropy"]
+    assert open_path == [(1, "Ch 3"), (2, "3.2 Entropy")]
+
+
+@pytest.mark.parametrize("carry", [[(1, "Ch 3"), (3, "3.1.1 Detail")], [[1, "Ch 3"], [3, "3.1.1 Detail"]]])
+def test_carried_levels_may_skip(carry):
+    blocks = [Block(gen(0, 40), "text", loc=1), Block("3.2 New", "heading", 2, loc=2), Block(gen(100, 40), "text", loc=2)]
+    chunks, open_path = run(blocks, carry_headings=carry)
+    assert [c.heading_path for c in chunks] == ["Ch 3 > 3.1.1 Detail", "Ch 3 > 3.2 New"]
+    assert open_path == [(1, "Ch 3"), (2, "3.2 New")]
+
+
+def test_same_level_heading_replaces_and_shallower_pops():
+    blocks = [Block("A", "heading", 1), Block("A1", "heading", 2), Block("A2", "heading", 2), Block(gen(0, 30), "text"),
+              Block("B", "heading", 1), Block(gen(50, 30), "text")]
+    chunks, open_path = run(blocks)
+    assert [c.heading_path for c in chunks] == ["A > A2", "B"]
+    assert open_path == [(1, "B")]
+
+
+# ---------- embedding text ----------
+
+def test_embedding_text_format():
+    c = ChunkDraft(0, "Gini is a measure.", "Ch 3 > 3.1 Gini", "page", 4, 4, 4)
+    assert embedding_text("Trees.pdf", c) == "search_document: Trees.pdf > Ch 3 > 3.1 Gini\n\nGini is a measure."
+    bare = ChunkDraft(0, "Body.", "", "page", 1, 1, 1)
+    assert embedding_text("Trees.pdf", bare) == "search_document: Trees.pdf\n\nBody."
+
+
+def test_embedding_text_is_prefix_plus_body():
+    for hp in ("", "A > B"):
+        c = ChunkDraft(0, "Body.", hp, "page", 1, 1, 1)
+        assert embedding_text("T.pdf", c) == DOCUMENT_PREFIX + embedding_body("T.pdf", c)
+        assert not embedding_body("T.pdf", c).startswith(DOCUMENT_PREFIX)
+
+
+# ---------- general guarantees ----------
+
+def test_seq_counts_from_first_seq():
+    chunks, _ = run([Block(gen(0, 2000), "text", loc=1)], "text", first_seq=40)
+    assert [c.seq for c in chunks] == list(range(40, 40 + len(chunks)))
+
+
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_no_text_lost_and_in_order(layout):
+    blocks, expected, n = [], [], 0
+    for s in range(1, 5):
+        blocks.append(Block(f"Head {s}", "heading", 1, loc=s))
+        for kind, size in (("text", 300), ("table", 60), ("code", 40), ("formula", 3), ("text", 700), ("notes", 20)):
+            text = gen(n, size)
+            if kind in ("table", "code"):
+                text = "\n".join(text[i:i + 60] for i in range(0, len(text), 60))
+            blocks.append(Block(text, kind, loc=s, loc_end=s))
+            expected += text.split()
+            n += size
+    chunks, _ = run(blocks, layout)
+    got = " ".join(c.text for c in chunks).replace("Speaker notes:", "").split()
+    it = iter(got)
+    assert all(w in it for w in expected), layout  # in-order subsequence (overlap repeats are fine)
+
+
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_every_layout_stays_under_the_cap_with_prose(layout):
+    blocks = [Block("H", "heading", 1, loc=1), Block(" ".join(f"abcdefghijkl{i}" for i in range(1500)) + ".", "text", loc=1)]
+    chunks, _ = run(blocks, layout, counter=by_chars)
+    assert all(by_chars(embedding_text("Trees.pdf", c)) <= MAX_EMBED_TOKENS for c in chunks)
+    assert len(chunks) > 1
