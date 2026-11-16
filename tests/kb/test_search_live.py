@@ -174,12 +174,16 @@ def test_live_hybrid_search(tmp_path, chroma_port):
         rest = [s for c, s in zip(everything, scores) if labels[c.id] not in relevant]
         best_answers.append((max(mine), max(rest), question))
         print(f"Calibration: relevant chunks score {min(mine):.2f}..{max(mine):.2f}; all other chunks score up to {max(rest):.2f}\n")
+        weak = any(h.weak for h in result.hits)
+        below = [h for h in result.hits if h.rerank < search_module.RERANK_RELEVANT_MIN and not h.weak]
+        print(f"Cut below the floor: {t['cut']}; weak fallback fired: {weak}; returned: {len(result.hits)}" + chr(10))
+        outcomes.append((question, not below, "no below-floor chunk unless weak"))
         origins = [h.origin for h in result.hits]
         top3 = [labels[h.chunk.id] for h in result.hits[:3]]
         if kind == "module":
             outcomes.append((question, origins[0] == "module", f"first hit origin {origins[0]}"))
         elif kind == "book":
-            outcomes.append((question, origins.count("reference") >= 7, f"{origins.count('reference')} book chunks"))
+            outcomes.append((question, origins[0] == "reference", f"first hit origin {origins[0]}, {origins.count('reference')} book chunks"))
         else:
             outcomes.append((question, next(iter(relevant)) in top3, f"top 3 {top3}"))
     print("## Calibration summary\n")

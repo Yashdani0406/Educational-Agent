@@ -138,7 +138,39 @@ def test_floor_moves_slots_to_books(repo, db):
     result = make(repo, store, FakeReranker(scores)).search("q", 1)
     assert result.trace["slots"] == {"module": 1, "reference": 9}
     assert sum(h.origin == "reference" for h in result.hits) == 9
-    assert len(result.hits) == 10  # the floor never empties results: the spare slot goes back to the module group
+    # the spare slot went to the module group, but its chunk is below the floor, so it is cut
+    assert len(result.hits) == 9 and result.trace["cut"] == 1
+    assert all(h.rerank >= -2.8 and not h.weak for h in result.hits)
+
+
+def test_below_floor_hits_are_dropped(repo, db):
+    seed(db)
+    repo.upsert([stored("a", "alpha"), stored("b", "beta"), stored("c", "gamma")])
+    store = FakeStore({"module": [DenseHit("a", 0.5), DenseHit("b", 0.5), DenseHit("c", 0.5)]})
+    result = make(repo, store, FakeReranker({"alpha": 4.0, "beta": -2.8, "gamma": -2.81})).search("q", 1)
+    assert [h.chunk.id for h in result.hits] == ["a", "b"]  # the floor itself passes
+    assert result.trace["cut"] == 1 and result.trace["k"]["returned"] == 2
+    assert [c["weak"] for c in result.trace["chunks"]] == [False, False]
+
+
+def test_all_below_floor_returns_three_weak_best_first(repo, db):
+    seed(db)
+    repo.upsert([stored(f"m{i}", f"mod{i}") for i in range(4)] + [stored("r0", "book0", origin="reference", module_id=None, file_id=2)])
+    store = FakeStore({"module": [DenseHit(f"m{i}", 0.5) for i in range(4)], "reference": [DenseHit("r0", 0.5)]})
+    scores = {"mod0": -5.0, "mod1": -9.0, "mod2": -6.0, "mod3": -7.0, "book0": -4.0}
+    result = make(repo, store, FakeReranker(scores)).search("q", 1)
+    assert [h.chunk.id for h in result.hits] == ["r0", "m0", "m2"]
+    assert all(h.weak for h in result.hits)
+    assert [c["weak"] for c in result.trace["chunks"]] == [True] * 3 and result.trace["k"]["returned"] == 3
+
+
+def test_reranker_off_cuts_nothing(repo, db):
+    seed(db)
+    repo.upsert([stored("a", "alpha"), stored("b", "beta")])
+    store = FakeStore({"module": [DenseHit("a", 0.5), DenseHit("b", 0.4)]})
+    for searcher in (make(repo, store, FakeReranker({"alpha": -50, "beta": -50}), rerank_enabled=False), make(repo, store, None)):
+        result = searcher.search("q", 1)
+        assert len(result.hits) == 2 and not any(h.weak for h in result.hits) and result.trace["cut"] == 0
 
 
 def test_filters_passed_to_both_searches(repo, db):
@@ -170,7 +202,7 @@ def test_trace_has_all_fields(repo, db):
     store = FakeStore({"module": [DenseHit("a", 0.5)], "reference": [DenseHit("r", 0.25)]})
     for query, searcher in [("alpha", make(repo, store, FakeReranker({"alpha": 1.23456, "beta": -2}))), ("zzz", make(repo, FakeStore()))]:
         trace = searcher.search(query, 1).trace
-        assert set(trace) == {"query", "filters", "alpha", "reranker", "k", "slots", "ms", "chunks"}
+        assert set(trace) == {"query", "filters", "alpha", "reranker", "k", "slots", "cut", "ms", "chunks"}
         assert set(trace["k"]) == {"dense", "keyword", "rerank_in", "returned"}
         assert set(trace["slots"]) == {"module", "reference"}
         assert set(trace["ms"]) == {"embed", "dense", "keyword", "fusion", "rerank", "total"}
@@ -178,7 +210,7 @@ def test_trace_has_all_fields(repo, db):
         assert trace["k"]["returned"] == len(trace["chunks"])
         assert set(trace["filters"]) == {"module_id", "topic_id", "file_id", "kind"}
     first = make(repo, store, FakeReranker({"alpha": 1.23456, "beta": -2})).search("alpha", 1).trace["chunks"][0]
-    assert set(first) == {"id", "origin", "dense", "keyword", "fused", "rerank"} and first["rerank"] == 1.235
+    assert set(first) == {"id", "origin", "dense", "keyword", "fused", "rerank", "weak"} and first["rerank"] == 1.235 and first["weak"] is False
 
 
 def test_course_scoped(repo, db):

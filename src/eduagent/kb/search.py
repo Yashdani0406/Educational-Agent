@@ -2,7 +2,7 @@
 
 import logging
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from eduagent.config import Settings
 from eduagent.db.chunks import ChunkKind, ChunksRepo, KeywordFilters, StoredChunk
@@ -19,8 +19,9 @@ WHAT_IT_DOES = (
 )
 
 SHORTLIST = 30
+WEAK_FALLBACK = 3  # hits returned (marked weak) when nothing reaches RERANK_RELEVANT_MIN
 # A passage counts as relevant when the reranker scores it at least this high. It only decides which group gives
-# slots to the other; it never removes a result. Calibrated in tests/kb/search_calibration.md.
+# slots to the other; it moves slots and cuts results below it (the 3 best come back marked weak if none pass). Calibrated in tests/kb/search_calibration.md.
 RERANK_RELEVANT_MIN = -2.8  # every labelled answer scored >= -2.20; non-answers below that scored <= -3.39 (see search_calibration.md)
 ORIGINS: tuple[Origin, Origin] = ("module", "reference")
 
@@ -41,6 +42,7 @@ class Hit:
     keyword: float
     fused: float
     rerank: float | None
+    weak: bool = False  # below the relevance floor, returned only because nothing else passed
 
 
 @dataclass(frozen=True)
@@ -75,7 +77,7 @@ def allot_slots(
     if relevant_module > m:
         module, reference = module + free_r, reference - free_r
     module, reference = min(module, available_module), min(reference, available_reference)
-    # The floor only moves slots: slots the other group could not take go back to whoever still has chunks to show.
+    # Slots the other group could not take go back to whoever still has chunks to show (hits below the floor are cut later).
     spare = min(total, available_module + available_reference) - module - reference
     if spare > 0:
         extra = min(spare, available_module - module)
@@ -161,6 +163,14 @@ class HybridSearcher:
         hits = ranked["module"][:m] + ranked["reference"][:r]
         # With the reranker off, fused scores are normalised per origin, so the order across origins is only approximate.
         hits.sort(key=lambda h: (-(h.rerank if use_rerank else h.fused), h.chunk.id))
+        cut = 0
+        if use_rerank:
+            passing = [h for h in hits if h.rerank >= RERANK_RELEVANT_MIN]
+            cut = len(hits) - len(passing)
+            if not passing:
+                best = sorted(ranked["module"] + ranked["reference"], key=lambda h: (-h.rerank, -h.fused, h.chunk.id))
+                passing = [replace(h, weak=True) for h in best[:WEAK_FALLBACK]]
+            hits = passing
         ms["total"] = (time.perf_counter() - started) * 1000
         trace = {
             "query": query,
@@ -169,16 +179,18 @@ class HybridSearcher:
             "reranker": use_rerank,
             "k": {"dense": SHORTLIST, "keyword": SHORTLIST, "rerank_in": rerank_in, "returned": len(hits)},
             "slots": {"module": m, "reference": r},
+            "cut": cut,
             "ms": {k: round(v, 1) for k, v in ms.items()},
             "chunks": [
                 {
                     "id": h.chunk.id, "origin": h.origin, "dense": round(h.dense, 3), "keyword": round(h.keyword, 3),
                     "fused": round(h.fused, 3), "rerank": None if h.rerank is None else round(h.rerank, 3),
+                    "weak": h.weak,
                 }
                 for h in hits
             ],
         }
-        log.info("search course=%s returned=%d slots=%d/%d total_ms=%.0f", course_id, len(hits), m, r, ms["total"])
+        log.info("search course=%s returned=%d cut=%d slots=%d/%d total_ms=%.0f", course_id, len(hits), cut, m, r, ms["total"])
         log.debug("search query=%r chunks=%s", query, [h.chunk.id for h in hits])
         return SearchResult(hits, trace)
 
