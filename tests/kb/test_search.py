@@ -7,6 +7,7 @@ from eduagent.config import Settings
 from eduagent.db.chunks import ChunksRepo, StoredChunk
 from eduagent.db.courses import CoursesRepo
 from eduagent.db.database import Database
+from eduagent.db.files import FilesRepo
 from eduagent.kb import rerank
 from eduagent.kb.rerank import Reranker
 from eduagent.kb.search import SHORTLIST, HybridSearcher, SearchFilters, allot_slots, tm2c2
@@ -30,6 +31,7 @@ def test_tm2c2_empty_lists():
         ((10, 0.7, 7, 0, 30, 0), (10, 0)),  # no books
         ((10, 0.7, 0, 9, 30, 30), (0, 10)),  # a question only the book covers
         ((10, 0.7, 4, 3, 4, 30), (4, 6)),  # only 4 module chunks exist
+        ((10, 0.7, 1, 0, 30, 30), (7, 3)),  # one relevant module chunk and nothing relevant in books: no slot to the books' junk
         ((10, 0.7, 0, 0, 5, 3), (5, 3)),  # nothing relevant: the floor never empties results
     ],
 )
@@ -83,19 +85,17 @@ def make(repo, store, reranker=None, **settings):
     return HybridSearcher(s, repo, store, FakeEmbedder(), reranker)
 
 
-def seed(repo, files=(1, 2, 3)):
-    """Files rows are needed by the chunks foreign key; uses the raw connection to stay independent of FilesRepo."""
-    with repo._db.connect() as conn:
-        for f in files:
-            conn.execute(
-                "INSERT INTO files(id, course_id, origin, kind, title, source_name, status, queue_pos, uploaded_at, uploaded_week) "
-                "VALUES (?, 1, 'module', 'pdf', 't', 't', 'done', ?, 'x', 1)",
-                (f, f),
-            )
+def seed(db):
+    """Three files in course 1 (ids 1-3: slides, book, second deck) and modules 1 and 2, through the real repos."""
+    courses, files = CoursesRepo(db), FilesRepo(db)
+    assert courses.add_module(1, "Trees") == 1 and courses.add_module(1, "Other") == 2
+    files.add(1, 1, "module", "pptx", "Trees", "trees.pptx", None, "h1")
+    files.add(1, None, "reference", "pdf", "Book", "book.pdf", None, "h2")
+    files.add(1, 1, "module", "pptx", "More trees", "more.pptx", None, "h3")
 
 
-def test_keyword_only_hit_reaches_results(repo):
-    seed(repo)
+def test_keyword_only_hit_reaches_results(repo, db):
+    seed(db)
     repo.upsert([stored("k", "call train_test_split before you fit"), stored("d", "unrelated words about trees")])
     store = FakeStore({"module": [DenseHit("d", 0.5)]})
     result = make(repo, store).search("train_test_split", 1)
@@ -105,8 +105,8 @@ def test_keyword_only_hit_reaches_results(repo):
     assert hit.dense == 0.0 and hit.keyword > 0
 
 
-def test_reranker_disabled_orders_by_fused(repo):
-    seed(repo)
+def test_reranker_disabled_orders_by_fused(repo, db):
+    seed(db)
     repo.upsert([stored("a", "alpha"), stored("b", "beta"), stored("c", "gamma")])
     store = FakeStore({"module": [DenseHit("a", 0.2), DenseHit("b", 0.9), DenseHit("c", 0.5)]})
     off = make(repo, store, FakeReranker({"alpha": 9, "beta": 0, "gamma": 5}), rerank_enabled=False).search("q", 1)
@@ -115,8 +115,8 @@ def test_reranker_disabled_orders_by_fused(repo):
     assert [h.chunk.id for h in make(repo, store, None).search("q", 1).hits] == ["b", "c", "a"]
 
 
-def test_reranker_reorders(repo):
-    seed(repo)
+def test_reranker_reorders(repo, db):
+    seed(db)
     repo.upsert([stored("a", "alpha"), stored("b", "beta"), stored("c", "gamma")])
     store = FakeStore({"module": [DenseHit("a", 0.2), DenseHit("b", 0.9), DenseHit("c", 0.5)]})
     result = make(repo, store, FakeReranker({"alpha": 9, "beta": 0, "gamma": 5})).search("q", 1)
@@ -124,8 +124,8 @@ def test_reranker_reorders(repo):
     assert result.hits[0].rerank == 9 and result.trace["k"]["rerank_in"] == 3
 
 
-def test_floor_moves_slots_to_books(repo):
-    seed(repo)
+def test_floor_moves_slots_to_books(repo, db):
+    seed(db)
     repo.upsert(
         [stored(f"m{i}", f"modtext{i}") for i in range(8)]
         + [stored(f"r{i}", f"booktext{i}", origin="reference", module_id=None, file_id=2) for i in range(9)]
@@ -141,10 +141,10 @@ def test_floor_moves_slots_to_books(repo):
     assert len(result.hits) == 10  # the floor never empties results: the spare slot goes back to the module group
 
 
-def test_filters_passed_to_both_searches(repo):
-    seed(repo)
+def test_filters_passed_to_both_searches(repo, db):
+    seed(db)
     repo.upsert([stored("a", "alpha topicword")])
-    topic = CoursesRepo(repo._db).add_topic(1, "Trees")
+    topic = CoursesRepo(db).add_topic(1, "Trees")
     repo.link_topics([("a", topic)])
     store = FakeStore({"module": [DenseHit("a", 0.5)]})
     filters = SearchFilters(module_id=1, topic_id=topic, file_id=1, kind="source")
@@ -153,14 +153,19 @@ def test_filters_passed_to_both_searches(repo):
         assert kwargs["module_id"] == 1 and kwargs["file_id"] == 1 and kwargs["kind"] == "source"
         assert kwargs["chunk_ids"] == ["a"] and kwargs["k"] == SHORTLIST
     assert [h.chunk.id for h in result.hits] == ["a"]  # the keyword side accepted all four filters too
+    # Reachable only by keyword (the dense fake never returns them): another module and another file.
+    repo.upsert([stored("other-module", "alpha topicword", module_id=2), stored("other-file", "alpha topicword", file_id=3)])
     quiet = FakeStore()  # only the keyword side can answer here
+    assert [h.chunk.id for h in make(repo, quiet).search("topicword", 1, SearchFilters(module_id=1, file_id=1)).hits] == ["a"]
+    assert {h.chunk.id for h in make(repo, quiet).search("topicword", 1, SearchFilters(module_id=2)).hits} == {"other-module"}
+    assert {h.chunk.id for h in make(repo, quiet).search("topicword", 1, SearchFilters(file_id=3)).hits} == {"other-file"}
     assert make(repo, quiet).search("topicword", 1, SearchFilters(kind="web")).hits == []
     assert make(repo, quiet).search("topicword", 1, SearchFilters(topic_id=topic + 99)).hits == []
     assert quiet.calls[-1][2]["chunk_ids"] == []
 
 
-def test_trace_has_all_fields(repo):
-    seed(repo)
+def test_trace_has_all_fields(repo, db):
+    seed(db)
     repo.upsert([stored("a", "alpha"), stored("r", "beta", origin="reference", module_id=None, file_id=2)])
     store = FakeStore({"module": [DenseHit("a", 0.5)], "reference": [DenseHit("r", 0.25)]})
     for query, searcher in [("alpha", make(repo, store, FakeReranker({"alpha": 1.23456, "beta": -2}))), ("zzz", make(repo, FakeStore()))]:
@@ -176,15 +181,11 @@ def test_trace_has_all_fields(repo):
     assert set(first) == {"id", "origin", "dense", "keyword", "fused", "rerank"} and first["rerank"] == 1.235
 
 
-def test_course_scoped(repo):
-    seed(repo)
-    CoursesRepo(repo._db).create_course("Other")
-    with repo._db.connect() as conn:
-        conn.execute(
-            "INSERT INTO files(id, course_id, origin, kind, title, source_name, status, queue_pos, uploaded_at, uploaded_week) "
-            "VALUES (9, 2, 'module', 'pdf', 't', 't', 'done', 9, 'x', 1)"
-        )
-    repo.upsert([stored("mine", "shared words"), stored("theirs", "shared words", course_id=2, module_id=None, file_id=9)])
+def test_course_scoped(repo, db):
+    seed(db)
+    other = CoursesRepo(db).create_course("Other").id
+    theirs = FilesRepo(db).add(other, None, "module", "pdf", "t", "t.pdf", None, "h9")
+    repo.upsert([stored("mine", "shared words"), stored("theirs", "shared words", course_id=other, module_id=None, file_id=theirs.id)])
     store = FakeStore({"module": [DenseHit("mine", 0.5), DenseHit("theirs", 0.9)]})  # a leaky store
     result = make(repo, store).search("shared words", 1)
     assert store.calls[0][0] == 1
@@ -193,15 +194,15 @@ def test_course_scoped(repo):
     assert [h.chunk.id for h in kw_only.hits] == ["mine"]
 
 
-def test_stale_vector_without_sqlite_row_is_skipped(repo):
-    seed(repo)
+def test_stale_vector_without_sqlite_row_is_skipped(repo, db):
+    seed(db)
     repo.upsert([stored("a", "alpha")])
     store = FakeStore({"module": [DenseHit("ghost", 0.9), DenseHit("a", 0.5)]})
     assert [h.chunk.id for h in make(repo, store).search("q", 1).hits] == ["a"]
 
 
-def test_total_defaults_to_setting_and_can_be_overridden(repo):
-    seed(repo)
+def test_total_defaults_to_setting_and_can_be_overridden(repo, db):
+    seed(db)
     repo.upsert([stored(f"m{i}", f"w{i}") for i in range(6)])
     store = FakeStore({"module": [DenseHit(f"m{i}", 0.5) for i in range(6)]})
     assert len(make(repo, store, search_results=4).search("q", 1).hits) == 4

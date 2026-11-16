@@ -2,11 +2,11 @@
 # Search calibration (live)
 
 Fixtures: 12-slide Decision Trees deck (module) and a 40-page Statistical Learning book (reference).
-RERANK_RELEVANT_MIN in force: 0.0
+RERANK_RELEVANT_MIN in force: -2.8
 
 ## 'What stopping rules decide when to stop splitting a node?' (module)
 
-slots {'module': 4, 'reference': 6} | ms {'embed': 136.0, 'dense': 9.6, 'keyword': 5.8, 'fusion': 4.2, 'rerank': 358.7, 'total': 514.4}
+slots {'module': 7, 'reference': 3} | ms {'embed': 128.8, 'dense': 13.2, 'keyword': 7.4, 'fusion': 0.1, 'rerank': 554.0, 'total': 708.9}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -14,18 +14,18 @@ slots {'module': 4, 'reference': 6} | ms {'embed': 136.0, 'dense': 9.6, 'keyword
 | 2 | slide-2 | module | 0.731 | 5.785 | 0.669 | -1.695 |
 | 3 | slide-12 | module | 0.696 | 10.568 | 0.754 | -1.909 |
 | 4 | slide-9 | module | 0.639 | 1.448 | 0.551 | -9.589 |
-| 5 | book-Cross-validation | reference | 0.576 | 1.58 | 0.726 | -11.111 |
-| 6 | book-Bias-variance tradeoff | reference | 0.518 | 1.639 | 0.71 | -11.301 |
-| 7 | book-Clustering | reference | 0.556 | 1.317 | 0.695 | -11.33 |
-| 8 | book-Clustering | reference | 0.596 | 0.0 | 0.591 | -11.343 |
-| 9 | book-Clustering | reference | 0.59 | 0.0 | 0.589 | -11.346 |
-| 10 | book-Cross-validation | reference | 0.539 | 0.0 | 0.57 | -11.354 |
+| 5 | slide-4 | module | 0.486 | 2.189 | 0.517 | -9.984 |
+| 6 | slide-10 | module | 0.589 | 1.609 | 0.538 | -10.087 |
+| 7 | slide-5 | module | 0.66 | 2.123 | 0.572 | -10.588 |
+| 8 | book-Cross-validation | reference | 0.576 | 1.58 | 0.726 | -11.111 |
+| 9 | book-Bias-variance tradeoff | reference | 0.518 | 1.639 | 0.71 | -11.301 |
+| 10 | book-Clustering | reference | 0.556 | 1.317 | 0.695 | -11.33 |
 
 Calibration: relevant chunks score 8.82..8.82; all other chunks score up to -1.69
 
 ## 'How do we prune a tree and how is alpha chosen?' (module)
 
-slots {'module': 4, 'reference': 6} | ms {'embed': 61.0, 'dense': 16.1, 'keyword': 11.3, 'fusion': 7.2, 'rerank': 413.5, 'total': 509.4}
+slots {'module': 7, 'reference': 3} | ms {'embed': 229.9, 'dense': 14.8, 'keyword': 8.2, 'fusion': 0.1, 'rerank': 398.6, 'total': 657.3}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -33,18 +33,18 @@ slots {'module': 4, 'reference': 6} | ms {'embed': 61.0, 'dense': 16.1, 'keyword
 | 2 | slide-12 | module | 0.673 | 5.226 | 0.767 | -3.952 |
 | 3 | slide-10 | module | 0.642 | 2.948 | 0.669 | -10.214 |
 | 4 | slide-1 | module | 0.631 | 2.729 | 0.657 | -10.611 |
-| 5 | book-Ridge regression | reference | 0.57 | 4.967 | 0.851 | -11.158 |
-| 6 | book-Bootstrap and bagging | reference | 0.612 | 2.407 | 0.729 | -11.205 |
-| 7 | book-Clustering | reference | 0.583 | 0.0 | 0.589 | -11.212 |
-| 8 | book-Clustering | reference | 0.571 | 0.0 | 0.585 | -11.279 |
-| 9 | book-Ridge regression | reference | 0.529 | 0.0 | 0.569 | -11.304 |
-| 10 | book-Clustering | reference | 0.542 | 0.296 | 0.59 | -11.31 |
+| 5 | slide-11 | module | 0.621 | 2.986 | 0.663 | -10.682 |
+| 6 | slide-7 | module | 0.608 | 4.216 | 0.706 | -10.879 |
+| 7 | book-Ridge regression | reference | 0.57 | 4.967 | 0.851 | -11.158 |
+| 8 | slide-5 | module | 0.584 | 2.056 | 0.615 | -11.177 |
+| 9 | book-Bootstrap and bagging | reference | 0.612 | 2.407 | 0.729 | -11.205 |
+| 10 | book-Clustering | reference | 0.583 | 0.0 | 0.589 | -11.212 |
 
 Calibration: relevant chunks score 0.65..0.65; all other chunks score up to -3.95
 
 ## 'What is the bias-variance tradeoff?' (book)
 
-slots {'module': 0, 'reference': 10} | ms {'embed': 56.4, 'dense': 16.2, 'keyword': 15.7, 'fusion': 13.5, 'rerank': 434.4, 'total': 536.5}
+slots {'module': 0, 'reference': 10} | ms {'embed': 95.9, 'dense': 15.4, 'keyword': 7.7, 'fusion': 0.1, 'rerank': 451.4, 'total': 576.1}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -63,7 +63,7 @@ Calibration: relevant chunks score 8.04..8.66; all other chunks score up to -3.5
 
 ## 'How does ridge regression shrink the coefficients?' (book)
 
-slots {'module': 0, 'reference': 10} | ms {'embed': 53.7, 'dense': 15.7, 'keyword': 14.2, 'fusion': 9.5, 'rerank': 353.5, 'total': 446.7}
+slots {'module': 0, 'reference': 10} | ms {'embed': 124.4, 'dense': 15.5, 'keyword': 8.0, 'fusion': 0.1, 'rerank': 478.0, 'total': 632.6}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -82,7 +82,7 @@ Calibration: relevant chunks score -2.20..7.65; all other chunks score up to -5.
 
 ## 'train_test_split' (term)
 
-slots {'module': 4, 'reference': 6} | ms {'embed': 45.9, 'dense': 14.6, 'keyword': 6.8, 'fusion': 6.1, 'rerank': 413.7, 'total': 487.3}
+slots {'module': 7, 'reference': 3} | ms {'embed': 124.2, 'dense': 16.2, 'keyword': 6.9, 'fusion': 0.1, 'rerank': 368.2, 'total': 521.3}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -91,17 +91,17 @@ slots {'module': 4, 'reference': 6} | ms {'embed': 45.9, 'dense': 14.6, 'keyword
 | 3 | slide-6 | module | 0.579 | 0.0 | 0.538 | -4.747 |
 | 4 | book-Bias-variance tradeoff | reference | 0.535 | 0.0 | 0.6 | -7.176 |
 | 5 | slide-2 | module | 0.595 | 0.0 | 0.544 | -7.957 |
-| 6 | book-Cross-validation | reference | 0.522 | 0.0 | 0.595 | -8.324 |
-| 7 | book-Linear regression | reference | 0.487 | 0.0 | 0.582 | -10.561 |
-| 8 | book-Bias-variance tradeoff | reference | 0.498 | 0.0 | 0.586 | -10.809 |
-| 9 | book-Bias-variance tradeoff | reference | 0.506 | 0.0 | 0.589 | -11.086 |
-| 10 | book-Bootstrap and bagging | reference | 0.48 | 0.0 | 0.579 | -11.111 |
+| 6 | slide-5 | module | 0.592 | 0.0 | 0.543 | -8.093 |
+| 7 | book-Cross-validation | reference | 0.522 | 0.0 | 0.595 | -8.324 |
+| 8 | slide-12 | module | 0.502 | 0.0 | 0.512 | -10.525 |
+| 9 | book-Linear regression | reference | 0.487 | 0.0 | 0.582 | -10.561 |
+| 10 | slide-7 | module | 0.459 | 0.0 | 0.497 | -11.071 |
 
 Calibration: relevant chunks score 7.87..7.87; all other chunks score up to -3.39
 
 ## 'Gini index' (term)
 
-slots {'module': 4, 'reference': 6} | ms {'embed': 36.5, 'dense': 17.5, 'keyword': 14.9, 'fusion': 10.9, 'rerank': 413.9, 'total': 494.0}
+slots {'module': 7, 'reference': 3} | ms {'embed': 179.1, 'dense': 14.8, 'keyword': 7.4, 'fusion': 0.1, 'rerank': 397.8, 'total': 605.0}
 
 | # | chunk | origin | dense | keyword | fused | rerank |
 |---|---|---|---|---|---|---|
@@ -110,18 +110,31 @@ slots {'module': 4, 'reference': 6} | ms {'embed': 36.5, 'dense': 17.5, 'keyword
 | 3 | book-Logistic regression | reference | 0.424 | 0.0 | 0.575 | -11.341 |
 | 4 | book-Logistic regression | reference | 0.417 | 0.0 | 0.572 | -11.351 |
 | 5 | book-Ridge regression | reference | 0.448 | 0.0 | 0.585 | -11.362 |
-| 6 | book-Ridge regression | reference | 0.438 | 0.0 | 0.581 | -11.366 |
-| 7 | book-Bias-variance tradeoff | reference | 0.46 | 0.0 | 0.59 | -11.368 |
-| 8 | book-Logistic regression | reference | 0.431 | 0.0 | 0.578 | -11.37 |
-| 9 | slide-10 | module | 0.428 | 0.0 | 0.479 | -11.404 |
-| 10 | slide-9 | module | 0.414 | 0.0 | 0.474 | -11.406 |
+| 6 | slide-10 | module | 0.428 | 0.0 | 0.479 | -11.404 |
+| 7 | slide-9 | module | 0.414 | 0.0 | 0.474 | -11.406 |
+| 8 | slide-12 | module | 0.406 | 0.0 | 0.471 | -11.416 |
+| 9 | slide-8 | module | 0.371 | 0.0 | 0.459 | -11.416 |
+| 10 | slide-2 | module | 0.387 | 0.0 | 0.465 | -11.43 |
 
 Calibration: relevant chunks score 9.20..9.20; all other chunks score up to -11.30
 
-## Calibration summary (RERANK_RELEVANT_MIN)
+## Calibration summary
 
-Lowest relevant rerank score: -2.20 (book-Ridge regression)
-Highest other rerank score: -1.69 (slide-2 for 'What stopping rules decide when to stop splitting a node?')
+The threshold is chosen on two numbers per question: the score of the best answer (the highest-scoring chunk labelled
+relevant) and the highest score of any chunk not labelled relevant. Every chunk of both groups was scored for this.
+
+| question | best answer | highest non-answer |
+|---|---|---|
+| 'What stopping rules decide when to stop splitting a node?' | 8.82 | -1.69 |
+| 'How do we prune a tree and how is alpha chosen?' | 0.65 | -3.95 |
+| 'What is the bias-variance tradeoff?' | 8.66 | -3.51 |
+| 'How does ridge regression shrink the coefficients?' | 7.65 | -5.37 |
+| 'train_test_split' | 7.87 | -3.39 |
+| 'Gini index' | 9.20 | -11.30 |
+
+Lowest best answer: 0.65. Highest non-answer: -1.69. Gap: 2.34.
+
+Overlap: the labels are partly subjective. The lowest chunk labelled relevant scores -2.20 (book-Ridge regression), below the highest unlabelled chunk at -1.69. Supporting and adjacent chunks therefore cannot be separated by any threshold; the floor only has to separate best answers from noise.
 
 ## Outcomes
 
@@ -131,9 +144,5 @@ Highest other rerank score: -1.69 (slide-2 for 'What stopping rules decide when 
 - OK: 'How does ridge regression shrink the coefficients?': 10 book chunks
 - OK: 'train_test_split': top 3 ['slide-9', 'slide-10', 'slide-6']
 - OK: 'Gini index': top 3 ['slide-3', 'slide-4', 'book-Logistic regression']
-
-## How RERANK_RELEVANT_MIN = 0.0 was chosen
-
-The best chunk for every question scored between 0.65 and 9.20 (the lowest is the pruning slide at 0.65). Chunks that do not answer the question scored at most -1.69; unrelated ones sit at -3 to -11. A threshold of 0.0 therefore sits above every non-answer with a margin of 1.69 and below every best answer with a margin of 0.65. Two supporting chunks that a reader would still call relevant score lower (one ridge-regression page at -2.20); with 0.0 they count as not relevant, which only means their group may hand a slot over, and they still appear while their group has slots. The floor never removes a result, so a slightly high floor costs little. Values below -2.2 were rejected because they would start counting adjacent but unhelpful slides (stopping-rule question: "Splitting a Node" -1.69) as relevant. The fixture set is small (6 questions), so the margin is evidence for the value, not proof; it should be revisited on real course material.
-
-Observation: for the two slide-only questions the module has only 1 relevant chunk, so by the specified slot rule the other 6 slots go to the book and fill with book chunks scoring about -11 (listed after the module chunks because the merged list is sorted by rerank score). Callers that want only useful passages can drop hits with rerank below RERANK_RELEVANT_MIN.
+.
+1 passed in 15.69s

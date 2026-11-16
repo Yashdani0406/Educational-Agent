@@ -21,7 +21,7 @@ WHAT_IT_DOES = (
 SHORTLIST = 30
 # A passage counts as relevant when the reranker scores it at least this high. It only decides which group gives
 # slots to the other; it never removes a result. Calibrated in tests/kb/search_calibration.md.
-RERANK_RELEVANT_MIN = 0.0  # best answers scored 0.65-9.2, non-answers at most -1.69
+RERANK_RELEVANT_MIN = -2.8  # every labelled answer scored >= -2.20; non-answers below that scored <= -3.39 (see search_calibration.md)
 ORIGINS: tuple[Origin, Origin] = ("module", "reference")
 
 
@@ -64,12 +64,17 @@ def tm2c2(dense: dict[str, float], keyword: dict[str, float], alpha: float) -> d
 def allot_slots(
     total: int, module_share: float, relevant_module: int, relevant_reference: int, available_module: int, available_reference: int
 ) -> tuple[int, int]:
-    """Module and book slots. Slots a group cannot fill with relevant chunks go to the other group (up to what it has)."""
+    """Module and book slots. Slots a group cannot fill with relevant chunks go to the other group only if it has more relevant chunks than its share."""
     m = round(total * module_share)
     r = total - m
-    m_keep, r_keep = min(m, relevant_module), min(r, relevant_reference)
-    module = min(m_keep + (r - r_keep), available_module)
-    reference = min(r_keep + (m - m_keep), available_reference)
+    module, reference = m, r
+    free_m, free_r = m - min(m, relevant_module), r - min(r, relevant_reference)  # slots a group cannot fill with relevant chunks
+    # They move only to a group that has more relevant chunks than its own share, so no slot goes to irrelevant chunks.
+    if relevant_reference > r:
+        module, reference = module - free_m, reference + free_m
+    if relevant_module > m:
+        module, reference = module + free_r, reference - free_r
+    module, reference = min(module, available_module), min(reference, available_reference)
     # The floor only moves slots: slots the other group could not take go back to whoever still has chunks to show.
     spare = min(total, available_module + available_reference) - module - reference
     if spare > 0:
@@ -126,10 +131,12 @@ class HybridSearcher:
             t = time.perf_counter()
             fused = tm2c2(dense, keyword, alpha)
             top = sorted(fused, key=lambda c: (-fused[c], c))[:SHORTLIST]
+            timed("fusion", t)
             # A chunk deleted since indexing is skipped; the course/origin check is a second guard on the vector store's filter.
             found = {c.id: c for c in self._chunks.get_many(top) if c.course_id == course_id and c.origin == origin}
+            if len(found) < len(top):
+                log.info("search skipped %d stale or foreign chunks (%s)", len(top) - len(found), origin)
             top = [c for c in top if c in found]
-            timed("fusion", t)
 
             scores: list[float | None] = [None] * len(top)
             if use_rerank and top:
@@ -152,6 +159,7 @@ class HybridSearcher:
             len(ranked["module"]), len(ranked["reference"]),
         )
         hits = ranked["module"][:m] + ranked["reference"][:r]
+        # With the reranker off, fused scores are normalised per origin, so the order across origins is only approximate.
         hits.sort(key=lambda h: (-(h.rerank if use_rerank else h.fused), h.chunk.id))
         ms["total"] = (time.perf_counter() - started) * 1000
         trace = {

@@ -147,13 +147,14 @@ def _ingest(tmp_path, port):
 
 def test_live_hybrid_search(tmp_path, chroma_port):
     settings, chunks_repo, store, embedder, course_id, labels = _ingest(tmp_path, chroma_port)
-    searcher = HybridSearcher(settings, chunks_repo, store, embedder, Reranker(settings))
+    reranker = Reranker(settings)
+    searcher = HybridSearcher(settings, chunks_repo, store, embedder, reranker)
     searcher.search("warm up", course_id)  # loads the models; excluded from the timings below
 
     print("\n# Search calibration (live)\n")
     print(f"Fixtures: {len(SLIDES)}-slide Decision Trees deck (module) and a {len(BOOK) * 4}-page Statistical Learning book (reference).")
     print(f"RERANK_RELEVANT_MIN in force: {search_module.RERANK_RELEVANT_MIN}\n")
-    relevant_scores, other_scores = [], []
+    relevant_scores, other_scores, best_answers = [], [], []
     outcomes = []
     for question, kind, relevant in QUESTIONS:
         result = searcher.search(question, course_id)
@@ -166,11 +167,12 @@ def test_live_hybrid_search(tmp_path, chroma_port):
         print()
         # calibration: rerank every chunk of both groups for this question
         everything = chunks_repo.get_many(list(labels))
-        scores = Reranker(settings).score(question, [f"{c.heading_path}\n{c.text}" for c in everything])
+        scores = reranker.score(question, [f"{c.heading_path}\n{c.text}" for c in everything])
         for c, s in zip(everything, scores):
             (relevant_scores if labels[c.id] in relevant else other_scores).append((s, labels[c.id], question))
         mine = [s for c, s in zip(everything, scores) if labels[c.id] in relevant]
         rest = [s for c, s in zip(everything, scores) if labels[c.id] not in relevant]
+        best_answers.append((max(mine), max(rest), question))
         print(f"Calibration: relevant chunks score {min(mine):.2f}..{max(mine):.2f}; all other chunks score up to {max(rest):.2f}\n")
         origins = [h.origin for h in result.hits]
         top3 = [labels[h.chunk.id] for h in result.hits[:3]]
@@ -181,8 +183,23 @@ def test_live_hybrid_search(tmp_path, chroma_port):
         else:
             outcomes.append((question, next(iter(relevant)) in top3, f"top 3 {top3}"))
     print("## Calibration summary\n")
-    print(f"Lowest relevant rerank score: {min(relevant_scores)[0]:.2f} ({min(relevant_scores)[1]})")
-    print(f"Highest other rerank score: {max(other_scores)[0]:.2f} ({max(other_scores)[1]} for {max(other_scores)[2]!r})\n")
+    print("The threshold is chosen on two numbers per question: the score of the best answer (the highest-scoring chunk labelled")
+    print("relevant) and the highest score of any chunk not labelled relevant. Every chunk of both groups was scored for this.\n")
+    print("| question | best answer | highest non-answer |" + chr(10) + "|---|---|---|")
+    for best, other, question in best_answers:
+        print(f"| {question!r} | {best:.2f} | {other:.2f} |")
+    lowest_best = min(b for b, _, _ in best_answers)
+    highest_other = max(o for _, o, _ in best_answers)
+    print()
+    print(f"Lowest best answer: {lowest_best:.2f}. Highest non-answer: {highest_other:.2f}. Gap: {lowest_best - highest_other:.2f}." + chr(10))
+    lowest = min(relevant_scores)
+    side = "below" if lowest[0] < highest_other else "above"
+    print(
+        f"Overlap: the labels are partly subjective. The lowest chunk labelled relevant scores {lowest[0]:.2f} ({lowest[1]}), "
+        f"{side} the highest unlabelled chunk at {highest_other:.2f}. Supporting and adjacent chunks therefore cannot be separated "
+        "by any threshold; the floor only has to separate best answers from noise." + chr(10)
+    )
+
     print("## Outcomes\n")
     for question, ok, detail in outcomes:
         print(f"- {'OK' if ok else 'FAIL'}: {question!r}: {detail}")
