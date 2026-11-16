@@ -326,3 +326,23 @@ Format: `## <date> — <decision>`, then *Chose* / *Rejected* / *Why*.
 *Chose:* Topic names are embedded with nomic's `clustering: ` prefix (`embed_labels`), separate from `search_document: ` and `search_query: `.
 *Rejected:* Reusing the document or query prefix for names.
 *Why:* Comparing short labels with each other is a clustering task; nomic-embed-text defines that prefix for it.
+
+## 2026-11-16 — Own regex sentence splitter
+*Chose:* A ~30-line regex splitter (`kb/sentences.py`). It ends a sentence at `.`, `?` or `!` (plus closing quotes or brackets) followed by whitespace, and protects the abbreviations `e.g., i.e., etc., vs., Fig., Eq., Dr., al., approx.` (case-insensitive), decimals and single-capital initials.
+*Rejected:* nltk / spaCy / pysbd.
+*Why:* The chunker only needs sentence-sized pieces to pack, not linguistic accuracy, and a regex adds no dependency or model download. A sentence that truly ends in one capital letter ("model B. Then") will not split; that is an accepted trade-off.
+
+## 2026-11-16 — One `Block` model for every parser
+*Chose:* Every parser (text, Markdown, Docling, web) emits `Block(text, kind, level, loc, loc_end)`, defined in `kb/types.py`.
+*Rejected:* Letting the chunker handle each file format.
+*Why:* The structure-aware chunker never sees a file format, so adding a format means writing one parser and nothing else.
+
+## 2026-11-16 — Newline boundaries in the sentence splitter (R16)
+*Chose:* A blank line always ends a sentence. A single newline ends one only when the next line starts with a list marker (`-`, `*`, `•`, or a number then `.` or `)`). Any other single newline is ordinary whitespace.
+*Rejected:* Treating every newline as a boundary.
+*Why:* Hard-wrapped TXT files and transcripts must not be cut mid-sentence, while bullet lines without full stops still become separate sentences.
+
+## 2026-11-16 — Splitter and parser fidelity (R17)
+*Chose:* `split_sentences` returns stripped substrings of the input in order, so no text is added, rewritten or lost apart from whitespace. `parse_markdown` keeps fence lines (with the language tag) in a code block's text, and an unclosed fence runs to the end of the document, as in CommonMark.
+*Rejected:* Rebuilding sentences or dropping fence lines.
+*Why:* Chunk text must be quotable from the source exactly, and the language tag helps the tutor read code.
